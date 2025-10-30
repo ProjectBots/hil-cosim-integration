@@ -7,4 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "mosaik>=3.5.0",
     "mosaik-api-v3>=3.0.13",
+    "mosaik-csv>=2.0.1",
+    "mosaik-pandapower>=0.2.2",
+    "mosaik-pvgis>=1.2.3",
 ]

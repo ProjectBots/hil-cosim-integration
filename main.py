@@ -1,57 +1,58 @@
-import mosaik_api_v3
-
 import mosaik
 
-META = {
-    "type": "time-based",
-    "models": {
-        "MyModel": {
-            "public": True,
-            "params": ["p1", "p2"],
-            "attrs": ["a", "b"],
-        },
-    },
+from datetime import datetime
+from datetime import timedelta
+
+START = datetime(2020, 1, 1, 0, 0, 0)
+STEP_SIZE = timedelta(minutes=15)
+
+PVSIM_PARAMS = {
+    "start_date": START,
+    "cache_dir": "./chache/pvsim/",
+    "verbose": True,
+}
+
+PVMODEL_PARAMS = {
+    "scale_factor": 1000,  # multiplies power production, 1 is equal to 1 kW peak power installed
+    "lat": 52.373,
+    "lon": 9.738,
+    "slope": 0,  # default value,
+    "azimuth": 0,  # default value,
+    "optimal_angle": True,  # calculate and use an optimal slope
+    "optimal_both": False,  # calculate and use an optimal slope and azimuth
+    "pvtech": "CIS",  # default value,
+    "system_loss": 14,  # default value,
+    "database": "PVGIS-SARAH3",  # default value,
+    "datayear": 2016,  # default value,
 }
 
 
-class MySimulator(mosaik_api_v3.Simulator):
-    def __init__(self):
-        super().__init__(META)
-        self.entities = {}
-
-    def init(self, sid, time_resolution, **sim_params):
-        print(f"Init called with sid={sid}, time_resolution={time_resolution}")
-        return self.meta
-
-    def create(self, num, model, **model_params):
-        entities = []
-        for i in range(num):
-            eid = f"{model}_{len(self.entities)}"
-            self.entities[eid] = model_params
-            entities.append({"eid": eid, "type": model})
-        return entities
-
-    def step(self, time, inputs, max_advance):
-        return time + 1
-
-    def get_data(self, outputs):
-        data = {}
-        for eid, attrs in outputs.items():
-            data[eid] = {a: 42 for a in attrs}  # dummy values
-        return data
-
-
 sim_config: mosaik.SimConfig = {
-    "MySim": {
-        "python": "main:MySimulator",
-    }
+    "BatterySim": {
+        "python": "simulators.BatterySimulator:Battery",
+    },
+    "Grid": {
+        "python": "mosaik_pandapower.simulator:Pandapower",
+    },
+    "PVSim": {"python": "mosaik_components.pv.pvgis_simulator:PVGISSimulator"},
 }
 
 
 def main():
     world = mosaik.World(sim_config)
 
-    mysim = world.start("MySim", sim_param1=123)
+    gridsim = world.start("Grid", stepSize=15 * 60)
+    mysim = world.start("MySim")
+    evsim = world.start("EV")
+
+    pv_sim = world.start(
+        "PVSim",
+        step_size=STEP_SIZE,
+        sim_params=PVSIM_PARAMS,
+    )
+    pv_model = pv_sim.PVSim.create(1, **PVMODEL_PARAMS)
+
+    grid = gridsim.Grid(gridfile="gridfile.json")
 
     a = mysim.MyModel.create(1, p1=10)
 
