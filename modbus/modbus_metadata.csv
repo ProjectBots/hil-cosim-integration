@@ -1,0 +1,8 @@
+dbus-service-name,description,Address,Type,Scalefactor,Range,dbus-obj-path,writable,dbus-unit,Remarks
+com.victronenergy.system,Battery Voltage (System),840,uint16,10,0 to 6553.5,/Dc/Battery/Voltage,no,V DC,Battery Voltage determined from different measurements. In order of preference: BMV-voltage (V), Multi-DC-Voltage (CV), MPPT-DC-Voltage (ScV), Charger voltage
+com.victronenergy.system,Battery Current (System),841,int16,10,-3276.8 to 3276.7,/Dc/Battery/Current,no,A DC,Postive: battery begin charged. Negative: battery being discharged
+com.victronenergy.system,Battery Power (System),842,int16,1,-32768 to 32767,/Dc/Battery/Power,no,W,Postive: battery begin charged. Negative: battery being discharged
+com.victronenergy.system,Battery State of Charge (System),843,uint16,1,0 to 100,/Dc/Battery/Soc,no,%,Best battery state of charge determined from different measurements.
+com.victronenergy.system,Battery state (System),844,uint16,1,0 to 65536,/Dc/Battery/State,no,0=idle;1=charging;2=discharging,
+com.victronenergy.system,Battery Consumed Amphours (System),845,uint16,-10,0 to -6553.6,/Dc/Battery/ConsumedAmphours,no,Ah,
+com.victronenergy.system,Battery Time to Go (System),846,uint16,0.01,0 to 6553600,/Dc/Battery/TimeToGo,no,s,Special value: 0 = charging
