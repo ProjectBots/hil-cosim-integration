@@ -8,6 +8,8 @@ dependencies = [
     "mosaik>=3.5.0",
     "mosaik-api-v3>=3.0.13",
     "mosaik-csv>=2.0.1",
-    "mosaik-pandapower>=0.2.2",
+    "mosaik-pandapower-2>=0.3.1",
     "mosaik-pvgis>=1.2.3",
+    "numba>=0.62.1",
+    "pandapower>=3.2.1",
 ]
