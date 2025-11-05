@@ -20,9 +20,11 @@ class BatteryModel(mosaik_api_v3.Simulator):
 
     def create(self, num, model, e_max_mwh):
         if num != 1:
-            raise ValueError("BatteryModelRT only supports creating one instance at a time")
+            raise ValueError(
+                "BatteryModelRT only supports creating one instance at a time"
+            )
         self.created = True
-        self.entity = { 
+        self.entity = {
             "P_out[MW]": 0.0,
             "E_max[MWH]": e_max_mwh,
             "E[MWH]": 0.0,
@@ -32,15 +34,15 @@ class BatteryModel(mosaik_api_v3.Simulator):
     def step(self, time, inputs, max_advance):
         # TODO: implement communication with real battery hardware
         return time + self.step_size
-    
+
     def get_data(self, outputs):
         data = {}
         for eid, attrs in outputs.items():
             data[eid] = {
                 "P_load[MW]": max(0.0, self.entity["P_out[MW]"]),
-				"P_gen[MW]": max(0.0, -self.entity["P_out[MW]"]),
-                "SoC": self.entity["E[MWH]"]
-                / self.entity["E_max[MWH]"],
+                "P_gen[MW]": max(0.0, -self.entity["P_out[MW]"]),
+                "SoC": self.entity["E[MWH]"] / self.entity["E_max[MWH]"],
+                "P[MW]": self.entity["P_out[MW]"],
             }
 
         return data

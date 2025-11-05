@@ -35,14 +35,17 @@ class BatteryModel(mosaik_api_v3.Simulator):
 
     def step(self, time, inputs, max_advance):
         for eid, attrs in inputs.items():
+
             p_target = sum(attrs["P_target[MW]"].values())
             p_out = self.entities[eid]["P_out[MW]"]
 
             charge_level = self.entities[eid]["E[MWH]"]
             charge_level -= p_out * (self.step_size / 3600.0)
-            charge_level = max(0.0, min(charge_level, self.entities[eid]["E_max[MWH]"]))
-            if charge_level < 1e-6:
+            charge_level = hu.clamp(charge_level, 0.0, self.entities[eid]["E_max[MWH]"])
+            if charge_level < 1e-6 and p_target > 0.0:
                 self.entities[eid]["P_out[MW]"] = 0.0  # Prevent discharging when empty
+            elif charge_level > self.entities[eid]["E_max[MWH]"] - 1e-6 and p_target < 0.0:
+                self.entities[eid]["P_out[MW]"] = 0.0  # Prevent charging when full
             else:
                 self.entities[eid]["P_out[MW]"] = hu.clamp(
                     p_target,
@@ -50,7 +53,7 @@ class BatteryModel(mosaik_api_v3.Simulator):
                     self.entities[eid]["P_max_load[MW]"],
                 )
             self.entities[eid]["E[MWH]"] = charge_level
-
+            
         return time + self.step_size
 
     def get_data(self, outputs):
@@ -60,6 +63,7 @@ class BatteryModel(mosaik_api_v3.Simulator):
                 "P_load[MW]": max(0.0, self.entities[eid]["P_out[MW]"]),
                 "P_gen[MW]": max(0.0, -self.entities[eid]["P_out[MW]"]),
                 "SoC": self.entities[eid]["E[MWH]"] / self.entities[eid]["E_max[MWH]"],
+                "P[MW]": self.entities[eid]["P_out[MW]"],
             }
 
         return data
