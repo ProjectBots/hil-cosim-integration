@@ -4,15 +4,32 @@
 from pyModbusTCP.server import ModbusServer
 from time import sleep
 # from random import uniform
+import csv
+
+metadata = []
+
+with open('modbus/modbus_metadata.csv', mode='r', newline='') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        metadata.append(row)
+
+
+def scale_value(value, address):
+    for row in metadata:
+        if int(row['Address']) == address:
+            scalefactor = float(row['Scalefactor'])
+            return value * scalefactor
+    raise ValueError(f"Address {address} not found in metadata")
+
 
 server = ModbusServer("127.0.0.1", 12345, no_block=True)
-VOLTAGE = 51.2 * 10
-AMPERAGE = 100.0 * 10
+VOLTAGE = 51.2
+AMPERAGE = 100.0
 POWER = VOLTAGE * AMPERAGE
 STATE_OF_CHARGE = 90.0
 STATE = 1   # 0=idle;1=charging;2=discharging
-CONSUMED_AMPHOURS = 10.0 * -10
-TIME_TO_GO = 3240 * 0.01
+CONSUMED_AMPHOURS = 10.0
+TIME_TO_GO = 3240
 
 
 try:
@@ -20,14 +37,14 @@ try:
     server.start()
     print("Server is online")
 
-    server.data_bank.set_holding_registers(840, [
-        int(VOLTAGE),
-        int(AMPERAGE),
-        int(POWER),
-        int(STATE_OF_CHARGE),
-        int(STATE),
-        int(CONSUMED_AMPHOURS),
-        int(TIME_TO_GO)
+    server.data_bank.set_input_registers(840, [
+        scale_value(VOLTAGE, 840),
+        scale_value(AMPERAGE, 841),
+        scale_value(POWER, 842),
+        scale_value(STATE_OF_CHARGE, 843),
+        scale_value(STATE, 844),
+        scale_value(CONSUMED_AMPHOURS, 845),
+        scale_value(TIME_TO_GO, 846),
     ])
 
     while True:
