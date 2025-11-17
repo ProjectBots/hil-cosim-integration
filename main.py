@@ -1,7 +1,5 @@
 import mosaik
 
-from datetime import datetime
-
 import scenario.scenariofactory as scenariofactory
 
 IS_REALTIME = True
