@@ -56,7 +56,7 @@ class EVModel(mosaik_api_v3.Simulator):
                 charge_level = hu.clamp(charge_level, 0.0, 0.05)
             else:
                 if charge_level >= 0.05:
-                    p_load = 0.000001  # minimal load to keep the EV connected
+                    p_load = 1e-9  # minimal load to keep the EV connected
                 charge_level += p_load * (self.step_size / 3600.0)
                 charge_level = hu.clamp(charge_level, 0.0, 0.05)
                 if rnd.random() < 0.2:

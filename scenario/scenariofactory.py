@@ -5,7 +5,6 @@ import mosaik.util as mu
 import scenario.gridfactory as gridfactory
 from typing import Any
 
-BATTERY_CAPACITY_MWH = 0.1
 
 START = datetime(2020, 6, 1, 10, 0, 0)
 
@@ -16,7 +15,7 @@ PVSIM_PARAMS = {
 }
 
 PVMODEL_PARAMS = {
-    "scale_factor": 40,  # multiplies power production, 1 is equal to 1 kW peak power installed
+    "scale_factor": 3.0,  # multiplies power production, 1 is equal to 1 kW peak power installed
     "lat": 47.72368491405467,
     "lon": 13.086242711396213,
     "slope": 0,
@@ -52,9 +51,9 @@ def add_simple_scenario(world: mosaik.World, step_size_seconds: int):
     pv_model = pv_sim.PVSim.create(1, **PVMODEL_PARAMS)[0]
     grid = pp_sim.Grid(net=griddata["net"]).children
     battery = battery_sim.BatteryModel.create(
-        1, e_max_mwh=BATTERY_CAPACITY_MWH, p_max_gen_mw=0.05, p_max_load_mw=0.05
+        1, e_max_mwh=10000 / 1e6, p_max_gen_mw=3000 / 1e6, p_max_load_mw=4000 / 1e6
     )[0]
-    ev = ev_sim.EVModel.create(1, p_charge_mw=0.01)[0]
+    ev = ev_sim.EVModel.create(1, p_charge_mw=3000 / 1e6)[0]
     controller = ctrl_sim.BatteryControllerSim.create(1)[0]
 
     node_bat = get_node_by_id(grid, "Bus", griddata["id_battery"])
@@ -69,7 +68,13 @@ def add_simple_scenario(world: mosaik.World, step_size_seconds: int):
     world.connect(ev, node_ev, ("P_load[MW]", "P_load[MW]"))
     # Use time shifted connection to prevent circular dependencies
     # If you want to know why we time shift here instead of the battery output, ask Tobias
-    world.connect(controller, battery, ("P_target[MW]", "P_target[MW]"), time_shifted=True, initial_data={"P_target[MW]": 0.0})
+    world.connect(
+        controller,
+        battery,
+        ("P_target[MW]", "P_target[MW]"),
+        time_shifted=True,
+        initial_data={"P_target[MW]": 0.0},
+    )
     world.connect(node_grid, controller, ("P[MW]", "P_grid[MW]"))
 
     webvis.set_config(
@@ -108,9 +113,9 @@ def add_simple_scenario(world: mosaik.World, step_size_seconds: int):
             "BatteryModel": {
                 "cls": "battery",
                 "attr": "SoC",
-                "unit": "%",
+                "unit": "SoC",
                 "default": 0.0,
-                "min": -1.0,
+                "min": 0.0,
                 "max": 1.0,
             },
             "BatteryControllerSim": {

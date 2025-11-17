@@ -14,5 +14,7 @@ dependencies = [
     "numba>=0.62.1",
     "pandapower>=3.2.1",
     "pymodbustcp>=0.3.0",
+    "python-dotenv>=1.2.1",
+    "schedule>=1.2.2",
     "setuptools>=80.9.0",
 ]

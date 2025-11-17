@@ -43,7 +43,7 @@ class BatteryControllerSim(mosaik_api_v3.Simulator):
     def step(self, time, inputs, max_advance):
         for eid, attrs in inputs.items():
             p_grid = sum(attrs["P_grid[MW]"].values())
-            self.entities[eid]["P_target[MW]"] = -p_grid / self.entities.__len__()
+            self.entities[eid]["P_target[MW]"] = p_grid / self.entities.__len__()
 
         return time + self.step_size
 

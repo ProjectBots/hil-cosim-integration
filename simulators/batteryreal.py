@@ -2,95 +2,120 @@ import mosaik_api_v3
 
 import simulators.batterymetainfo as batterymetainfo
 from pyModbusTCP.client import ModbusClient
-import csv
+import os
+import warnings
 
-MAX_CHARGE_WH = 5120
+import threading
+import asyncio
+import concurrent.futures
+import helperutils as hu
 
+# TODO: central location for these constants
+REGISTER_P_TARGET = 1  # Register to write target power (kW)
+REGISTER_STATE = 2  # Register to write charge/discharge state
+REGISTER_P_OUT = 3  # Register to read current power (kW)
+REGISTER_E_MWH = 4  # Register to read current energy (kWh)
 
-def init_modbus_client(csv_path='modbus/modbus_metadata.csv', host='127.0.0.1', port=12345):
-    metadata = []
-    with open(csv_path, mode='r', newline='') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            metadata.append(row)
-    
-    client = ModbusClient(host=host, port=port)
-    
-    return client, metadata
-
-
-def scale_value(value, address, metadata):
-    for row in metadata:
-        if int(row['Address']) == address:
-            scalefactor = float(row['Scalefactor'])
-            return value / scalefactor
-    raise ValueError(f"Address {address} not found in metadata")
-
-
-def read_register(client, metadata, address):
-    if client.open():
-        result = client.read_input_registers(address, 1)
-        client.close()
-        if result:
-            return scale_value(result[0], address, metadata)
-        else:
-            raise ConnectionError("Read failed or no response")
-    else:
-        raise ConnectionError("Connection failed")
-    
 
 class BatteryModel(mosaik_api_v3.Simulator):
     created: bool = False
     eid: str = "Real_Battery"
-    entity: dict[str, float]
+    entity_public: dict[str, float]
+
+    client: ModbusClient
     step_size: int
+
+    resp_future: concurrent.futures.Future[dict[str, float]] | None = None
+    loop: asyncio.AbstractEventLoop
 
     def __init__(self):
         super().__init__(batterymetainfo.BATTERY_MODEL_META_DATA)
 
     def init(self, sid, time_resolution, step_size):
-        if time_resolution != 1.0:
-            raise ValueError("BatteryModelRT only supports time_resolution of '1s'")
         self.step_size = step_size
+        self.loop = asyncio.new_event_loop()
+        threading.Thread(target=self.loop.run_forever, daemon=True).start()
         return self.meta
 
-    def create(self, num, model, e_max_mwh, **kwargs):
-        if num != 1:
-            raise ValueError(
-                "BatteryModelRT only supports creating one instance at a time"
-            )
+    def finalize(self):
+        if self.client.is_open:
+            self.client.close()
+        if self.loop is not None:
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        return super().finalize()
+
+    def create(self, num, model, e_max_mwh, p_max_gen_mw, p_max_load_mw):
+        if num != 1 or self.created:
+            raise ValueError("BatteryModel only supports one instance")
         self.created = True
-        self.entity = {
+        self.entity_public = {
             "P_out[MW]": 0.0,
-            "E_max[MWH]": MAX_CHARGE_WH/1e6, #TODO were does this value come from, we need to adjust it, i replaced it temporarily e_max_mwh
+            "E_max[MWH]": e_max_mwh,
             "E[MWH]": 0.0,
+            "P_max_gen[MW]": p_max_gen_mw,  # Not used but kept for compatibility
+            "P_max_load[MW]": p_max_load_mw,  # Not used but kept for compatibility
         }
-        self.client, self.metadata = init_modbus_client()  # Initialize Modbus client
+
+        port_str = os.getenv("PORT", "5001")
+        if not port_str:
+            raise ValueError("PORT environment variable not set")
+        host = os.getenv("HOST", "localhost")
+        if not host:
+            raise ValueError("HOST environment variable not set")
+        try:
+            port = int(port_str)
+        except ValueError | TypeError:
+            raise ValueError("PORT environment variable is not a valid integer")
+
+        self.client = ModbusClient(host=host, port=port)
+        if not self.client.open():
+            raise ConnectionError("Unable to connect to Modbus server")
+
         return [{"eid": self.eid, "type": model}]
 
     def step(self, time, inputs, max_advance):
-        P_load = sum(attrs["P_load[MW]"][-1] for attrs in inputs.values() if "P_load[MW]" in attrs)
-        
-        # values from modbus server
-        try:
-            real_energy = read_register(self.client, self.metadata, 843) * MAX_CHARGE_WH / 1e6
-        except Exception as e:
-            print("Modbus read error:", e)
-            real_energy = 0.0
+        if self.resp_future is not None:
+            self.entity_public.update(self.resp_future.result())
 
-        self.entity["P_out[MW]"] = -P_load  # batterie compensates load TODO improve this i think
-        self.entity["E[MWH]"] = real_energy
+        attrs = inputs.get(self.eid, {})
+        p_target = sum(attrs["P_target[MW]"].values()) * 1e6
+
+        self.resp_future = asyncio.run_coroutine_threadsafe(
+            self.update_entity_data(p_target), self.loop
+        )
 
         return time + self.step_size
+
+    async def update_entity_data(self, p_target) -> dict[str, float]:
+        if not self.client.is_open:
+            warnings.warn("Modbus client not connected, attempting to reconnect")
+            if not self.client.open():
+                raise ConnectionError("Unable to connect to Modbus server")
+
+        state = 0 if p_target > 0 else 1  # 0: discharging, 1: charging
+        p_target = int(hu.clamp(abs(p_target), 0, pow(2, 16) - 1))
+
+        self.client.write_multiple_registers(REGISTER_P_TARGET, [p_target, state])
+
+        regs = self.client.read_holding_registers(REGISTER_P_OUT, 2)
+        if regs is None or len(regs) < 2:
+            raise ConnectionError("Failed to read from Modbus server")
+
+        result = {
+            "P_out[MW]": regs[0] / 1e6 * (1 if state == 0 else -1),
+            "E[MWH]": regs[1] / 1e6,
+        }
+
+        return result
 
     def get_data(self, outputs):
         data = {}
         for eid, attrs in outputs.items():
             data[eid] = {
-                "P_load[MW]": max(0.0, self.entity["P_out[MW]"]),
-                "P_gen[MW]": max(0.0, -self.entity["P_out[MW]"]),
-                "SoC": self.entity["E[MWH]"] / self.entity["E_max[MWH]"],
-                "P[MW]": self.entity["P_out[MW]"],
+                "P_load[MW]": max(0.0, self.entity_public["P_out[MW]"]),
+                "P_gen[MW]": max(0.0, -self.entity_public["P_out[MW]"]),
+                "SoC": self.entity_public["E[MWH]"] / self.entity_public["E_max[MWH]"],
+                "P[MW]": self.entity_public["P_out[MW]"],
             }
 
         return data

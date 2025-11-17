@@ -36,12 +36,14 @@ class BatteryModel(mosaik_api_v3.Simulator):
     def step(self, time, inputs, max_advance):
         for eid, attrs in inputs.items():
 
-            p_target = sum(attrs["P_target[MW]"].values())
             p_out = self.entities[eid]["P_out[MW]"]
 
             charge_level = self.entities[eid]["E[MWH]"]
             charge_level -= p_out * (self.step_size / 3600.0)
             charge_level = hu.clamp(charge_level, 0.0, self.entities[eid]["E_max[MWH]"])
+
+            p_target = sum(attrs["P_target[MW]"].values())
+
             if charge_level < 1e-6 and p_target > 0.0:
                 self.entities[eid]["P_out[MW]"] = 0.0  # Prevent discharging when empty
             elif charge_level > self.entities[eid]["E_max[MWH]"] - 1e-6 and p_target < 0.0:
