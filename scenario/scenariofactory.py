@@ -12,7 +12,7 @@ START = datetime(2020, 6, 1, 10, 0, 0)
 PVSIM_PARAMS = {
     "start_date": START,
     "cache_dir": "./cache/pvsim/",
-    "verbose": True,
+    "verbose": False,
 }
 
 PVMODEL_PARAMS = {
@@ -64,24 +64,12 @@ def add_simple_scenario(world: mosaik.World, step_size_seconds: int):
     node_grid = [elem for elem in grid if elem.type == "ExternalGrid"][0]
 
     world.connect(pv_model, node_pv, ("P[MW]", "P_gen[MW]"))
-    # Use time shifted connection to prevent circular dependencies
-    # We have to wait for measurements from the previous time step anyway when controlling the real battery
-    world.connect(
-        battery,
-        node_bat,
-        ("P_load[MW]", "P_load[MW]"),
-        time_shifted=True,
-        initial_data={"P_load[MW]": 0.0},
-    )
-    world.connect(
-        battery,
-        node_bat,
-        ("P_gen[MW]", "P_gen[MW]"),
-        time_shifted=True,
-        initial_data={"P_gen[MW]": 0.0},
-    )
+    world.connect(battery, node_bat, ("P_load[MW]", "P_load[MW]"))
+    world.connect(battery, node_bat, ("P_gen[MW]", "P_gen[MW]"))
     world.connect(ev, node_ev, ("P_load[MW]", "P_load[MW]"))
-    world.connect(controller, battery, ("P_target[MW]", "P_target[MW]"))
+    # Use time shifted connection to prevent circular dependencies
+    # If you want to know why we time shift here instead of the battery output, ask Tobias
+    world.connect(controller, battery, ("P_target[MW]", "P_target[MW]"), time_shifted=True, initial_data={"P_target[MW]": 0.0})
     world.connect(node_grid, controller, ("P[MW]", "P_grid[MW]"))
 
     webvis.set_config(
@@ -140,9 +128,9 @@ def add_simple_scenario(world: mosaik.World, step_size_seconds: int):
                 "default": 0,
                 "min": -0.1,
                 "max": 0.1,
-            }
-        } # pyright: ignore[reportCallIssue]
-    ) 
+            },
+        }  # pyright: ignore[reportCallIssue]
+    )
 
     vis_topo = webvis.Topology()
 
