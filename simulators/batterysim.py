@@ -34,7 +34,6 @@ class BatteryModel(mosaik_api_v3.Simulator):
         return entities
 
     def step(self, time, inputs, max_advance):
-        print(inputs)
         for eid, attrs in inputs.items():
 
             p_target = sum(attrs["P_target[MW]"].values())
