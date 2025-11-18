@@ -7,9 +7,9 @@ import warnings
 import dotenv
 
 # TODO: central location for these constants
-POWER_GEN_MAX_W = 4000.0
+POWER_GEN_MAX_W = 3000.0
 POWER_LOAD_MAX_W = 3000.0
-ENERGY_CAPACITY_WH = 10000.0
+ENERGY_CAPACITY_WH = 1000.0
 
 REGISTER_P_TARGET = 1
 REGISTER_STATE = 2

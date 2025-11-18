@@ -4,7 +4,7 @@ import helperutils as hu
 
 from dotenv import load_dotenv
 
-STEP_SIZE_SECONDS = 3
+STEP_SIZE_SECONDS = 2
 STEPS_TOTAL = 500
 
 def main():

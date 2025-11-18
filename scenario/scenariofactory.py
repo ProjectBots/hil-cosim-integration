@@ -15,7 +15,7 @@ PVSIM_PARAMS = {
 }
 
 PVMODEL_PARAMS = {
-    "scale_factor": 2.2,  # multiplies power production, 1 is equal to 1 kW peak power installed
+    "scale_factor": 1.7,  # multiplies power production, 1 is equal to 1 kW peak power installed
     "lat": 47.72368491405467,
     "lon": 13.086242711396213,
     "slope": 0,
@@ -51,7 +51,7 @@ def add_simple_scenario(world: mosaik.World, step_size_seconds: int):
     pv_model = pv_sim.PVSim.create(1, **PVMODEL_PARAMS)[0]
     grid = pp_sim.Grid(net=griddata["net"]).children
     battery = battery_sim.BatteryModel.create(
-        1, e_max_mwh=10000 / 1e6, p_max_gen_mw=3000 / 1e6, p_max_load_mw=4000 / 1e6
+        1, e_max_mwh=1000 / 1e6, p_max_gen_mw=3000 / 1e6, p_max_load_mw=3000 / 1e6
     )[0]
     ev = ev_sim.EVModel.create(1, p_charge_mw=2500 / 1e6)[0]
     controller = ctrl_sim.BatteryControllerSim.create(1)[0]

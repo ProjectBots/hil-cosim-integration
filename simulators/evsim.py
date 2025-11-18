@@ -16,7 +16,8 @@ META = {
     },
 }
 
-# TODO: add realistic values for EV consumption and charging behavior
+ENERGY_CAPACITY_MWH = 200 / 1e6
+
 
 class EVModel(mosaik_api_v3.Simulator):
     time_resolution: float
@@ -37,8 +38,8 @@ class EVModel(mosaik_api_v3.Simulator):
         for i in range(num):
             eid = f"{model}_{len(self.entities)}"
             self.entities[eid] = {
-                "E[MWH]": 0.0,
-                "P_load[MW]": 0.01,
+                "E[MWH]": ENERGY_CAPACITY_MWH / 2,
+                "P_load[MW]": 0.0,
                 "P_charge[MW]": p_charge_mw,
             }
             entities.append({"eid": eid, "type": model})
@@ -46,20 +47,24 @@ class EVModel(mosaik_api_v3.Simulator):
 
     def step(self, time, inputs, max_advance):
         for eid in self.entities.keys():
-            p_load = self.entities[eid].get("P_load[MW]", 0.0)
-
+            p_load = self.entities[eid]["P_load[MW]"]
             charge_level = self.entities[eid]["E[MWH]"]
+            charge_level += p_load * (self.step_size / 3600.0)
+            charge_level = hu.clamp(charge_level, 0.0, ENERGY_CAPACITY_MWH)
+
             if p_load == 0.0:
-                if rnd.random() < 0.2:
+                if rnd.random() < 0.05:
                     p_load = self.entities[eid]["P_charge[MW]"]
-                charge_level -= rnd.random() / 100 * (self.step_size / 3600.0)
-                charge_level = hu.clamp(charge_level, 0.0, 0.05)
+                charge_level -= (
+                    2
+                    * rnd.random()
+                    * self.entities[eid]["P_charge[MW]"]
+                    * (self.step_size / 3600.0)
+                )
             else:
-                if charge_level >= 0.05:
+                if charge_level >= ENERGY_CAPACITY_MWH:
                     p_load = 1e-9  # minimal load to keep the EV connected
-                charge_level += p_load * (self.step_size / 3600.0)
-                charge_level = hu.clamp(charge_level, 0.0, 0.05)
-                if rnd.random() < 0.2:
+                if rnd.random() < 0.02:
                     p_load = 0.0
 
             self.entities[eid]["P_load[MW]"] = p_load
@@ -69,7 +74,6 @@ class EVModel(mosaik_api_v3.Simulator):
     def get_data(self, outputs):
         data = {}
         for eid, attrs in outputs.items():
-            # print(f"[EVModel] get_data for {eid}: E={self.entities[eid]['E[MWH]']}, P_load={self.entities[eid]['P_load[MW]']}")
             data[eid] = {
                 "E[MWH]": self.entities[eid]["E[MWH]"],
                 "P_load[MW]": self.entities[eid]["P_load[MW]"],
