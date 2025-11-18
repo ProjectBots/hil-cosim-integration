@@ -5,14 +5,13 @@ import helperutils as hu
 
 
 class BatteryModel(mosaik_api_v3.Simulator):
-    time_resolution: float
+    time_resolution: float # TODO: fix time resolution not affecting power calculations
     entities: dict[str, dict[str, float]]
     step_size: int
 
     def __init__(self):
         super().__init__(batterymetainfo.BATTERY_MODEL_META_DATA)
         self.entities = {}
-        self.charge_level = 0.0
 
     def init(self, sid, time_resolution, step_size):
         self.time_resolution = time_resolution
@@ -26,7 +25,7 @@ class BatteryModel(mosaik_api_v3.Simulator):
             self.entities[eid] = {
                 "P_out[MW]": 0.0,
                 "E_max[MWH]": e_max_mwh,
-                "E[MWH]": 0.0,
+                "E[MWH]": e_max_mwh / 2.0,  # start at 50% SOC
                 "P_max_gen[MW]": p_max_gen_mw,
                 "P_max_load[MW]": p_max_load_mw,
             }

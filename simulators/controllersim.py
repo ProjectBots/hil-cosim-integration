@@ -15,15 +15,18 @@ META = {
     },
 }
 
+NUM_AVG_STEPS = 10
 
 class BatteryControllerSim(mosaik_api_v3.Simulator):
     entities: dict[str, dict[str, float]]
     step_size: int
     time_resolution: float
+    last_targets: dict[str, list[float]]
 
     def __init__(self):
         super().__init__(META)
         self.entities = {}
+        self.last_targets = {}
 
     def init(self, sid, time_resolution, step_size):
         self.time_resolution = time_resolution
@@ -37,13 +40,17 @@ class BatteryControllerSim(mosaik_api_v3.Simulator):
             self.entities[eid] = {
                 "P_target[MW]": 0.0,
             }
+            self.last_targets[eid] = [0.0 for _ in range(NUM_AVG_STEPS)]
+
             entities.append({"eid": eid, "type": model})
         return entities
 
     def step(self, time, inputs, max_advance):
         for eid, attrs in inputs.items():
             p_grid = sum(attrs["P_grid[MW]"].values())
-            self.entities[eid]["P_target[MW]"] = p_grid / self.entities.__len__()
+            self.last_targets[eid].pop(0)
+            self.last_targets[eid].append(p_grid / self.entities.__len__())
+            self.entities[eid]["P_target[MW]"] = sum(self.last_targets[eid]) / NUM_AVG_STEPS
 
         return time + self.step_size
 

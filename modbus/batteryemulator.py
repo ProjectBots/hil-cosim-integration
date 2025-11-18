@@ -4,7 +4,6 @@ import os
 import schedule
 import helperutils as hu
 import warnings
-
 import dotenv
 
 # TODO: central location for these constants
@@ -19,15 +18,21 @@ REGISTER_E = 4
 
 STEP_SIZE_SECONDS = 1
 
+
 class ModbusBatteryServer:
-    
-    current_power_w = 0.0
-    energy_wh = 0.0
+    current_power_w: float = 0.0
+    energy_wh: float = ENERGY_CAPACITY_WH / 2.0  # start at 50% SOC
     server: ModbusServer
-    
+
     def __init__(self, host, port) -> None:
-        if POWER_GEN_MAX_W > 65535 or POWER_LOAD_MAX_W > 65535 or ENERGY_CAPACITY_WH > 65535:
-            raise ValueError("POWER_GEN_MAX_W, POWER_LOAD_MAX_W, and ENERGY_CAPACITY_WH must be <= 65535 for Modbus register storage")
+        if (
+            POWER_GEN_MAX_W > 65535
+            or POWER_LOAD_MAX_W > 65535
+            or ENERGY_CAPACITY_WH > 65535
+        ):
+            raise ValueError(
+                "POWER_GEN_MAX_W, POWER_LOAD_MAX_W, and ENERGY_CAPACITY_WH must be <= 65535 for Modbus register storage"
+            )
 
         print("Starting Modbus Battery Server...")
         self.server = ModbusServer(host, port, no_block=True)
@@ -45,43 +50,44 @@ class ModbusBatteryServer:
         if regs is None or len(regs) < 2:
             print("Failed to read target power or state from Modbus register")
             return
-        p_target_w = regs[0]
+
         state = regs[1]
-        
-        if state == 0:
-            # Discharging
-            if self.energy_wh <= 0.0:
-                self.current_power_w = 0.0  # Prevent discharging when empty
-            else:
-                self.current_power_w = min(p_target_w, POWER_LOAD_MAX_W)
-        elif state == 1:
-            # Charging
-            if self.energy_wh >= ENERGY_CAPACITY_WH:
-                self.current_power_w = 0.0  # Prevent charging when full
-            else:
-                self.current_power_w = -min(p_target_w, POWER_GEN_MAX_W)
-        else:
+        if state not in (0, 1):
             warnings.warn(f"Unknown state {state}, setting power to 0")
             self.current_power_w = 0.0  # Idle
-        
+            self.server.data_bank.set_holding_registers(
+                REGISTER_P_OUT, [int(abs(self.current_power_w))]
+            )
+            return
+
+        p_target_w = regs[0] * (
+            1.0 if state == 0 else -1.0
+        )  # positive for discharging, negative for charging
+
+        self.current_power_w = hu.clamp(p_target_w, -POWER_GEN_MAX_W, POWER_LOAD_MAX_W)
+
+        if state == 0 and self.energy_wh <= 0.0:
+            self.current_power_w = 0.0  # Prevent discharging when empty
+        elif state == 1 and self.energy_wh >= ENERGY_CAPACITY_WH:
+            self.current_power_w = 0.0  # Prevent charging when full
+
         self.energy_wh -= self.current_power_w * (STEP_SIZE_SECONDS / 3600.0)
         self.energy_wh = hu.clamp(self.energy_wh, 0.0, ENERGY_CAPACITY_WH)
-        
+
         self.server.data_bank.set_holding_registers(
             REGISTER_P_OUT, [int(abs(self.current_power_w))]
         )
-        self.server.data_bank.set_holding_registers(
-            REGISTER_E, [int(self.energy_wh)]
+        self.server.data_bank.set_holding_registers(REGISTER_E, [int(self.energy_wh)])
+
+        print(
+            f"Modbus Battery Emulator Step: P_target={p_target_w:.1f}W, State={state}, P_out={self.current_power_w:.1f}W, E={self.energy_wh:.1f}Wh, SoC={self.energy_wh / ENERGY_CAPACITY_WH * 100.0:.1f}%"
         )
-        
-        print(f"Modbus Battery Emulator Step: P_target={p_target_w} W, State={state}, P_out={self.current_power_w} W, E={self.energy_wh} Wh")
-        
 
     def stop(self) -> None:
         print("Shutting down server...")
         self.server.stop()
         print("Server is offline")
-        
+
 
 if __name__ == "__main__":
     dotenv.load_dotenv()
@@ -98,7 +104,7 @@ if __name__ == "__main__":
         raise ValueError("PORT environment variable is not a valid integer")
 
     emulator = ModbusBatteryServer(host, port)
-    
+
     schedule.every(STEP_SIZE_SECONDS).seconds.do(emulator.step)
 
     # wait for keyboard interrupt to stop the server
@@ -108,6 +114,5 @@ if __name__ == "__main__":
             time.sleep(0.1)
     except KeyboardInterrupt:
         emulator.stop()
-    
+
     exit(0)
-        
