@@ -7,7 +7,7 @@ import warnings
 
 import threading
 import asyncio
-import concurrent.futures
+import concurrent.futures as cf
 import helperutils as hu
 
 # TODO: central location for these constants
@@ -23,24 +23,34 @@ class BatteryModel(mosaik_api_v3.Simulator):
     entity_public: dict[str, float]
 
     client: ModbusClient
-    step_size: int
+    step_size: int = -1 # negative value indicates uninitialized
 
-    resp_future: concurrent.futures.Future[dict[str, float]] | None = None
-    loop: asyncio.AbstractEventLoop
+    use_async: bool
+    resp_future: cf.Future[dict[str, float]]
+    loop: asyncio.AbstractEventLoop 
 
     def __init__(self):
         super().__init__(batterymetainfo.BATTERY_MODEL_META_DATA)
 
-    def init(self, sid, time_resolution, step_size):
+    def init(self, sid, time_resolution, step_size, use_async: bool):
+        if step_size <= 0:
+            raise ValueError("Step size must be positive")
         self.step_size = step_size
-        self.loop = asyncio.new_event_loop()
-        threading.Thread(target=self.loop.run_forever, daemon=True).start()
+        self.use_async = use_async
+        if self.use_async:
+            self.resp_future = cf.Future()
+            self.loop = asyncio.new_event_loop()
+            self.resp_future.set_result({})
+            threading.Thread(target=self.loop.run_forever, daemon=True).start()
         return self.meta
 
     def finalize(self):
+        if self.step_size <= 0:
+            return super().finalize()
+        
         if self.client.is_open:
             self.client.close()
-        if self.loop is not None:
+        if self.use_async:
             self.loop.call_soon_threadsafe(self.loop.stop)
         return super().finalize()
 
@@ -74,19 +84,26 @@ class BatteryModel(mosaik_api_v3.Simulator):
         return [{"eid": self.eid, "type": model}]
 
     def step(self, time, inputs, max_advance):
-        if self.resp_future is not None:
+        if self.use_async:
             self.entity_public.update(self.resp_future.result())
 
-        attrs = inputs.get(self.eid, {})
-        p_target = sum(attrs["P_target[MW]"].values()) * 1e6
+            attrs = inputs.get(self.eid, {})
+            p_target = sum(attrs["P_target[MW]"].values()) * 1e6
 
-        self.resp_future = asyncio.run_coroutine_threadsafe(
-            self.update_entity_data(p_target), self.loop
-        )
+            self.resp_future = asyncio.run_coroutine_threadsafe(
+                self.update_entity_data_async(p_target), self.loop
+            )
+        else:
+            attrs = inputs.get(self.eid, {})
+            p_target = sum(attrs["P_target[MW]"].values()) * 1e6
+            self.entity_public.update(self.update_entity_data(p_target))
 
         return time + self.step_size
 
-    async def update_entity_data(self, p_target) -> dict[str, float]:
+    async def update_entity_data_async(self, p_target) -> dict[str, float]:
+        return await self.loop.run_in_executor(None, self.update_entity_data, p_target)
+
+    def update_entity_data(self, p_target) -> dict[str, float]:
         if not self.client.is_open:
             warnings.warn("Modbus client not connected, attempting to reconnect")
             if not self.client.open():

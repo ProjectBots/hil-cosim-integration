@@ -5,17 +5,22 @@ import helperutils as hu
 
 
 class BatteryModel(mosaik_api_v3.Simulator):
-    time_resolution: float # TODO: fix time resolution not affecting power calculations
+    time_resolution: float
     entities: dict[str, dict[str, float]]
+    use_async: bool
+    buffer: dict[str, dict[str, float]]
     step_size: int
+
 
     def __init__(self):
         super().__init__(batterymetainfo.BATTERY_MODEL_META_DATA)
         self.entities = {}
+        self.buffer = {}
 
-    def init(self, sid, time_resolution, step_size):
+    def init(self, sid, time_resolution, step_size, use_async):
         self.time_resolution = time_resolution
         self.step_size = step_size
+        self.use_async = use_async
         return self.meta
 
     def create(self, num, model, e_max_mwh, p_max_gen_mw, p_max_load_mw):
@@ -29,42 +34,59 @@ class BatteryModel(mosaik_api_v3.Simulator):
                 "P_max_gen[MW]": p_max_gen_mw,
                 "P_max_load[MW]": p_max_load_mw,
             }
+            self.buffer[eid] = {
+                "P_out[MW]": 0.0,
+                "E[MWH]": e_max_mwh / 2.0,
+            }
             entities.append({"eid": eid, "type": model})
         return entities
 
     def step(self, time, inputs, max_advance):
         for eid, attrs in inputs.items():
+            if self.use_async:
+                self.buffer[eid]["P_out[MW]"] = self.entities[eid]["P_out[MW]"]
+                self.buffer[eid]["E[MWH]"] = self.entities[eid]["E[MWH]"]
+
 
             p_out = self.entities[eid]["P_out[MW]"]
 
-            charge_level = self.entities[eid]["E[MWH]"]
-            charge_level -= p_out * (self.step_size / 3600.0)
-            charge_level = hu.clamp(charge_level, 0.0, self.entities[eid]["E_max[MWH]"])
-
             p_target = sum(attrs["P_target[MW]"].values())
 
+            charge_level = self.entities[eid]["E[MWH]"]
+            charge_level += p_out * (self.step_size * self.time_resolution / 3600.0 )
+            charge_level = hu.clamp(charge_level, 0.0, self.entities[eid]["E_max[MWH]"])
+
             if charge_level < 1e-6 and p_target > 0.0:
-                self.entities[eid]["P_out[MW]"] = 0.0  # Prevent discharging when empty
-            elif charge_level > self.entities[eid]["E_max[MWH]"] - 1e-6 and p_target < 0.0:
-                self.entities[eid]["P_out[MW]"] = 0.0  # Prevent charging when full
+                p_out = 0.0  # Prevent discharging when empty
+            elif (
+                charge_level > self.entities[eid]["E_max[MWH]"] - 1e-6
+                and p_target < 0.0
+            ):
+                p_out = 0.0  # Prevent charging when full
             else:
-                self.entities[eid]["P_out[MW]"] = hu.clamp(
+                p_out = hu.clamp(
                     p_target,
                     -self.entities[eid]["P_max_gen[MW]"],
                     self.entities[eid]["P_max_load[MW]"],
                 )
-            self.entities[eid]["E[MWH]"] = charge_level
             
+            self.entities[eid]["P_out[MW]"] = p_out
+            self.entities[eid]["E[MWH]"] = charge_level
+
+            if not self.use_async:
+                self.buffer[eid]["P_out[MW]"] = p_out
+                self.buffer[eid]["E[MWH]"] = charge_level
+
         return time + self.step_size
 
     def get_data(self, outputs):
         data = {}
         for eid, attrs in outputs.items():
             data[eid] = {
-                "P_load[MW]": max(0.0, self.entities[eid]["P_out[MW]"]),
-                "P_gen[MW]": max(0.0, -self.entities[eid]["P_out[MW]"]),
-                "SoC": self.entities[eid]["E[MWH]"] / self.entities[eid]["E_max[MWH]"],
-                "P[MW]": self.entities[eid]["P_out[MW]"],
+                "P_load[MW]": max(0.0, self.buffer[eid]["P_out[MW]"]),
+                "P_gen[MW]": max(0.0, -self.buffer[eid]["P_out[MW]"]),
+                "SoC": self.buffer[eid]["E[MWH]"] / self.entities[eid]["E_max[MWH]"],
+                "P[MW]": self.buffer[eid]["P_out[MW]"],
             }
 
         return data

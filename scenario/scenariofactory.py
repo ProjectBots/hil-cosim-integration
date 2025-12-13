@@ -36,10 +36,10 @@ def get_node_by_id(grid, type, id) -> Any:
     raise ValueError(f"Node of type {type} with id {id} not found in grid")
 
 
-def add_simple_scenario(world: mosaik.World, step_size_seconds: int):
+def add_simple_scenario(world: mosaik.World, step_size_seconds: int, use_async_battery: bool):
     pv_sim = world.start("PVSim", step_size=step_size_seconds, sim_params=PVSIM_PARAMS)
     pp_sim = world.start("PPSim", step_size=step_size_seconds)
-    battery_sim = world.start("BatterySim", step_size=step_size_seconds)
+    battery_sim = world.start("BatterySim", step_size=step_size_seconds, use_async=use_async_battery)
     ev_sim = world.start("EVSim", step_size=step_size_seconds)
     ctrl_sim = world.start("ControllerSim", step_size=step_size_seconds)
     webvis = world.start(

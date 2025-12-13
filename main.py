@@ -36,7 +36,9 @@ def main():
 
     world = mosaik.World(sim_config)
 
-    scenariofactory.add_simple_scenario(world, STEP_SIZE_SECONDS)
+    use_async_battery = hu.get_bool_env_var("USE_ASYNC_BATTERY", True)
+
+    scenariofactory.add_simple_scenario(world, STEP_SIZE_SECONDS, use_async_battery)
 
     # TODO: figure out how to get rid of behind schedule warnings when rt_factor is set
     world.run(
