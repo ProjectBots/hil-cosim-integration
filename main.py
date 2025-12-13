@@ -4,7 +4,7 @@ import helperutils as hu
 
 from dotenv import load_dotenv
 
-STEP_SIZE_SECONDS = 2
+STEP_SIZE_SECONDS = 0.5
 STEPS_TOTAL = 500
 
 def main():
@@ -34,15 +34,15 @@ def main():
         },
     }
 
-    world = mosaik.World(sim_config)
+    world = mosaik.World(sim_config, time_resolution=STEP_SIZE_SECONDS)
 
     use_async_battery = hu.get_bool_env_var("USE_ASYNC_BATTERY", True)
 
-    scenariofactory.add_simple_scenario(world, STEP_SIZE_SECONDS, use_async_battery)
+    scenariofactory.add_simple_scenario(world, use_async_battery)
 
     # TODO: figure out how to get rid of behind schedule warnings when rt_factor is set
     world.run(
-        until=STEPS_TOTAL * STEP_SIZE_SECONDS,
+        until=STEPS_TOTAL,
         rt_factor=1.0 if hu.get_bool_env_var("USE_REAL_BATTERY", False) else None,
     )
 

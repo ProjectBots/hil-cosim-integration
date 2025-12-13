@@ -17,6 +17,7 @@ META = {
 }
 
 ENERGY_CAPACITY_MWH = 200 / 1e6
+BATTERY_EFFICIENCY = 0.8
 
 
 class EVModel(mosaik_api_v3.Simulator):
@@ -49,24 +50,26 @@ class EVModel(mosaik_api_v3.Simulator):
         for eid in self.entities.keys():
             p_load = self.entities[eid]["P_load[MW]"]
             charge_level = self.entities[eid]["E[MWH]"]
-            charge_level += p_load * (self.step_size / 3600.0)
-            charge_level = hu.clamp(charge_level, 0.0, ENERGY_CAPACITY_MWH)
 
             if p_load == 0.0:
-                if rnd.random() < 0.05:
-                    p_load = self.entities[eid]["P_charge[MW]"]
                 charge_level -= (
                     2
                     * rnd.random()
                     * self.entities[eid]["P_charge[MW]"]
-                    * (self.step_size / 3600.0)
+                    * (self.step_size * self.time_resolution / 3600.0)
                 )
+                if rnd.random() < 0.04 * self.time_resolution:
+                    p_load = self.entities[eid]["P_charge[MW]"]
             else:
+                charge_level += p_load * (
+                    self.step_size * self.time_resolution / 3600.0 * BATTERY_EFFICIENCY
+                )
                 if charge_level >= ENERGY_CAPACITY_MWH:
                     p_load = 1e-9  # minimal load to keep the EV connected
-                if rnd.random() < 0.02:
+                if rnd.random() < 0.02 * self.time_resolution:
                     p_load = 0.0
 
+            charge_level = hu.clamp(charge_level, 0.0, ENERGY_CAPACITY_MWH)
             self.entities[eid]["P_load[MW]"] = p_load
             self.entities[eid]["E[MWH]"] = charge_level
         return time + self.step_size
