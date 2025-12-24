@@ -1,52 +1,47 @@
 from pyModbusTCP.client import ModbusClient
 from typing import cast
 
+from modbushil.modbusiobundlesconfiguration import ModbusIOBundlesConfiguration
+from modbushil.registerrange import RegisterRange
+
 from .modbusregistertypes import ModbusRegisterTypes
-from .registerrange import RegisterRange
+
+import modbushil.registerhelpers as rh
+
 
 class ModbusClientManager:
     def __init__(
-        self, host: str, port: int, io_config: dict[str, dict[str, list[str]]]
+        self,
+        host: str,
+        port: int,
+        io_config: ModbusIOBundlesConfiguration,
+        modbus_client: ModbusClient | None = None,
     ):
-        self.client: ModbusClient = ModbusClient(host=host, port=port)
-        self.read_ranges: dict[ModbusRegisterTypes, list[RegisterRange]] = {}
-        self.write_ranges: dict[ModbusRegisterTypes, list[RegisterRange]] = {}
+        self.client = (
+            modbus_client
+            if modbus_client is not None
+            else ModbusClient(host=host, port=port)
+        )
+        self.io_config = io_config
         self.buffer_register: dict[ModbusRegisterTypes, dict[int, list[int]]] = {}
         self.buffer_discrete: dict[ModbusRegisterTypes, dict[int, list[bool]]] = {}
 
         for reg_type in ModbusRegisterTypes:
-            self.read_ranges[reg_type] = []
-            self.write_ranges[reg_type] = []
             self.buffer_register[reg_type] = {}
             self.buffer_discrete[reg_type] = {}
 
-        for direction, regs in io_config.items():
-            for reg_type_str, reg_list in regs.items():
-                reg_type = ModbusRegisterTypes.parse_regtype(reg_type_str)
-                for reg_str in reg_list:
-                    reg_range = RegisterRange.parse_registerrange(
-                        reg_str,
-                        reg_type_override=reg_type,
-                    )
-
-                    if direction == "read":
-                        self.read_ranges[reg_type].append(reg_range)
-                    elif direction == "write":
-                        self.write_ranges[reg_type].append(reg_range)
-                    else:
-                        raise ValueError(f"Invalid IO config direction: {direction}")
-
-                    if reg_type in (
-                        ModbusRegisterTypes.COIL,
-                        ModbusRegisterTypes.DISCRETE_INPUT,
-                    ):
-                        self.buffer_discrete[reg_type][reg_range.start] = [
-                            False
-                        ] * reg_range.length
-                    else:
-                        self.buffer_register[reg_type][reg_range.start] = [
-                            0
-                        ] * reg_range.length
+            for reg_range in self.io_config.read_ranges[reg_type] + self.io_config.write_ranges[reg_type]:
+                if reg_type in (
+                    ModbusRegisterTypes.COIL,
+                    ModbusRegisterTypes.DISCRETE_INPUT,
+                ):
+                    self.buffer_discrete[reg_type][reg_range.start] = [
+                        False
+                    ] * reg_range.length
+                else:
+                    self.buffer_register[reg_type][reg_range.start] = [
+                        0
+                    ] * reg_range.length
 
     def connect(self):
         if not self.client.is_open:
@@ -64,7 +59,7 @@ class ModbusClientManager:
         :type self: ModbusInterface
         """
         self.connect()
-        for reg_type, ranges in self.read_ranges.items():
+        for reg_type, ranges in self.io_config.read_ranges.items():
             for i, reg_range in enumerate(ranges):
                 if reg_type == ModbusRegisterTypes.COIL:
                     regs = self.client.read_coils(reg_range.start, reg_range.length)
@@ -109,8 +104,9 @@ class ModbusClientManager:
         :param self: The ModbusInterface instance
         :type self: ModbusInterface
         """
+        # TODO: optimize by only writing changed registers
         self.connect()
-        for reg_type, ranges in self.write_ranges.items():
+        for reg_type, ranges in self.io_config.write_ranges.items():
             for i, reg_range in enumerate(ranges):
                 if reg_type in (
                     ModbusRegisterTypes.COIL,
@@ -136,9 +132,7 @@ class ModbusClientManager:
                         f"Failed to write {reg_type.name} registers to Modbus server"
                     )
 
-    def get_registers(
-        self, reg_type: ModbusRegisterTypes, start: int, length: int
-    ) -> list[int]:
+    def get_registers(self, address: RegisterRange) -> list[int]:
         """
         Gets a list of integer values from the internal buffer for the specified register type, starting address, and length.
 
@@ -153,19 +147,23 @@ class ModbusClientManager:
         :return: The list of integer values at the specified register addresses
         :rtype: list[int]
         """
-        for range_start, regs in self.buffer_register[reg_type].items():
-            if range_start <= start < range_start + len(regs):
-                if start + length <= range_start + len(regs):
-                    return regs[start - range_start : start - range_start + length]
+        for range_start, regs in self.buffer_register[address.type].items():
+            if range_start <= address.start < range_start + len(regs):
+                if address.start + address.length <= range_start + len(regs):
+                    return regs[
+                        address.start - range_start : address.start
+                        - range_start
+                        + address.length
+                    ]
                 else:
                     raise ValueError(
-                        f"Requested length exceeds buffer for {reg_type.name} starting at {start}"
+                        f"Requested length exceeds buffer for {address.type.name} starting at {address.start}"
                     )
-        raise ValueError(f"Start address {start} not in buffer for {reg_type.name}")
+        raise ValueError(
+            f"Start address {address.start} not in buffer for {address.type.name}"
+        )
 
-    def set_registers(
-        self, reg_type: ModbusRegisterTypes, start: int, values: list[int]
-    ):
+    def set_registers(self, address: RegisterRange, values: list[int]):
         """
         Sets a list of integer values in the internal buffer for the specified register type, starting address, and length.
 
@@ -182,204 +180,130 @@ class ModbusClientManager:
         :param values: The list of integer values to set at the specified register addresses
         :type values: list[int]
         """
-        for range_start, regs in self.buffer_register[reg_type].items():
-            if range_start <= start < range_start + len(regs):
-                if start + len(values) <= range_start + len(regs):
-                    regs[start - range_start : start - range_start + len(values)] = [
-                        v & 0xFFFF for v in values
-                    ]
+        for range_start, regs in self.buffer_register[address.type].items():
+            if range_start <= address.start < range_start + len(regs):
+                if address.start + len(values) <= range_start + len(regs):
+                    regs[
+                        address.start - range_start : address.start
+                        - range_start
+                        + len(values)
+                    ] = [v & 0xFFFF for v in values]
                     return
                 else:
                     raise ValueError(
-                        f"Values exceed buffer for {reg_type.name} starting at {start}"
+                        f"Values exceed buffer for {address.type.name} starting at {address.start}"
                     )
-        raise ValueError(f"Start address {start} not in buffer for {reg_type.name}")
+        raise ValueError(
+            f"Start address {address.start} not in buffer for {address.type.name}"
+        )
 
-    def get_uint16(self, reg_type: ModbusRegisterTypes, address: int) -> int:
+    def get_int(self, address: RegisterRange) -> int:
         """
-        Gets an unsigned 16-bit integer value from the internal buffer for the specified register type and address.
+        Gets an integer value from the internal buffer for the specified register range.
+
+        The data type is a signed integer. The size is determined by the length of the register range.
 
         :param self: The ModbusInterface instance
         :type self: ModbusInterface
-        :param reg_type: The register type
-        :type reg_type: ModbusRegisterTypes
-        :param address: The register address
-        :type address: int
+        :param address: The register range
+        :type address: RegisterRange
         :return: The integer value at the specified register address
         :rtype: int
         """
-        if reg_type in (ModbusRegisterTypes.COIL, ModbusRegisterTypes.DISCRETE_INPUT):
-            raise ValueError(
-                f"Cannot get integer value from discrete register type: {reg_type.name}"
-            )
 
-        regs = self.get_registers(reg_type, address, 1)
-        if len(regs) != 1:
-            raise ValueError(
-                f"Failed to get register value at address {address} for {reg_type.name}"
-            )
+        regs = self.get_registers(address)
+        return rh.register_to_int(regs)
 
-        return regs[0]
-
-    def set_uint16(self, reg_type: ModbusRegisterTypes, address: int, value: int):
+    def set_int(self, address: RegisterRange, value: int):
         """
-        Sets an integer value in the internal buffer for the specified register type and address.
+        Sets an integer value in the internal buffer for the specified register range.
 
-        There is no range checking on the value, it is assumed to be a 16-bit unsigned integer.
+        The data type is a signed integer. The size is determined by the length of the register range.
+
+        There is no range checking on the value, it is assumed to fit in the specified register range.
 
         To actually write the value to the Modbus server, call :func:`write_registers` afterwards.
 
         :param self: The ModbusInterface instance
-        :param reg_type: The register type
-        :type reg_type: ModbusRegisterTypes
-        :param address: The register address
-        :type address: int
-        :param value: The integer value to set at the specified register address
-        :type value: int
-        """
-        self.set_registers(reg_type, address, [value & 0xFFFF])
-
-    def get_uint32(self, reg_type: ModbusRegisterTypes, address: int) -> int:
-        """
-        Gets a 32-bit integer value from the internal buffer for the specified register type and address.
-
-        The value is constructed from two consecutive 16-bit registers, with the first register being the high word (big endian).
-
-        :param self: The ModbusInterface instance
-        :type self: ModbusInterface
-        :param reg_type: The register type
-        :type reg_type: ModbusRegisterTypes
-        :param address: The starting register address (high word)
-        :type address: int
-        :return: The 32-bit integer value at the specified register address
-        :rtype: int
-        """
-        regs = self.get_registers(reg_type, address, 2)
-        if len(regs) != 2:
-            raise ValueError(
-                f"Failed to get 32-bit register value at address {address} for {reg_type.name}"
-            )
-
-        return (regs[0] << 16) | regs[1]
-
-    def set_uint32(self, reg_type: ModbusRegisterTypes, address: int, value: int):
-        """
-        Sets a 32-bit integer value in the internal buffer for the specified register type and address.
-
-        The value is split into two consecutive 16-bit registers, with the first register being the high word (big endian).
-
-        There is no range checking on the value, it is assumed to be a 32-bit unsigned integer.
-
-        To actually write the value to the Modbus server, call :func:`write_registers` afterwards.
-
-        :param self: The ModbusInterface instance
-        :param reg_type: The register type
-        :type reg_type: ModbusRegisterTypes
-        :param address: The starting register address (high word)
-        :type address: int
-        :param value: The 32-bit integer value to set at the specified register address
-        :type value: int
-        """
-        if reg_type in (ModbusRegisterTypes.COIL, ModbusRegisterTypes.DISCRETE_INPUT):
-            raise ValueError(
-                f"Cannot set integer value in discrete register type: {reg_type.name}"
-            )
-
-        high_word = (value >> 16) & 0xFFFF
-        low_word = value & 0xFFFF
-        self.set_registers(reg_type, address, [high_word, low_word])
-
-    def get_int16(self, reg_type: ModbusRegisterTypes, address: int) -> int:
-        """
-        Gets a signed 16-bit integer value from the internal buffer for the specified register type and address.
-
-        :param self: The ModbusInterface instance
-        :type self: ModbusInterface
-        :param reg_type: The register type
-        :type reg_type: ModbusRegisterTypes
-        :param address: The register address
-        :type address: int
-        :return: The integer value at the specified register address
-        :rtype: int
-        """
-        uint_value = self.get_uint16(reg_type, address)
-        if uint_value >= 0x8000:
-            return uint_value - 0x10000
-        else:
-            return uint_value
-
-    def set_int16(self, reg_type: ModbusRegisterTypes, address: int, value: int):
-        """
-        Sets a signed 16-bit integer value in the internal buffer for the specified register type and address.
-
-        The value is stored as an unsigned 16-bit integer in two's complement format.
-
-        There is no range checking on the value, it is assumed to be a 16-bit signed integer.
-
-        To actually write the value to the Modbus server, call :func:`write_registers` afterwards.
-
-        :param self: The ModbusInterface instance
-        :param reg_type: The register type
-        :type reg_type: ModbusRegisterTypes
-        :param address: The register address
-        :type address: int
+        :param address: The register range
+        :type address: RegisterRange
         :param value: The integer value to set at the specified register address
         :type value: int
         """
 
-        if value < 0:
-            uint_value = value + 0x10000
-        else:
-            uint_value = value
+        regs = rh.int_to_register(value, address.length)
+        self.set_registers(address, regs)
 
-        self.set_registers(reg_type, address, [uint_value & 0xFFFF])
-
-    def get_int32(self, reg_type: ModbusRegisterTypes, address: int) -> int:
+    def get_uint(self, address: RegisterRange) -> int:
         """
-        Gets a signed 32-bit integer value from the internal buffer for the specified register type and address.
+        Gets an unsigned integer value from the internal buffer for the specified register range.
 
-        The value is constructed from two consecutive 16-bit registers, with the first register being the high word (big endian).
+        The data type is an unsigned integer. The size is determined by the length of the register range.
 
         :param self: The ModbusInterface instance
         :type self: ModbusInterface
-        :param reg_type: The register type
-        :type reg_type: ModbusRegisterTypes
-        :param address: The starting register address (high word)
-        :type address: int
-        :return: The 32-bit integer value at the specified register address
+        :param address: The register range
+        :type address: RegisterRange
+        :return: The unsigned integer value at the specified register address
         :rtype: int
         """
-        uint_value = self.get_uint32(reg_type, address)
-        if uint_value >= 0x80000000:
-            return uint_value - 0x100000000
-        else:
-            return uint_value
 
-    def set_int32(self, reg_type: ModbusRegisterTypes, address: int, value: int):
+        regs = self.get_registers(address)
+        return rh.register_to_uint(regs)
+
+    def set_uint(self, address: RegisterRange, value: int):
         """
-        Sets a signed 32-bit integer value in the internal buffer for the specified register type and address.
+        Sets an unsigned integer value in the internal buffer for the specified register range.
 
-        The value is stored as an unsigned 32-bit integer in two's complement format.
+        The data type is an unsigned integer. The size is determined by the length of the register range.
 
-        There is no range checking on the value, it is assumed to be a 32-bit signed integer.
+        There is no range checking on the value, it is assumed to fit in the specified register range.
 
         To actually write the value to the Modbus server, call :func:`write_registers` afterwards.
 
         :param self: The ModbusInterface instance
-        :param reg_type: The register type
-        :type reg_type: ModbusRegisterTypes
-        :param address: The starting register address (high word)
-        :type address: int
-        :param value: The 32-bit integer value to set at the specified register address
+        :param address: The register range
+        :type address: RegisterRange
+        :param value: The unsigned integer value to set at the specified register address
         :type value: int
         """
 
-        if value < 0:
-            uint_value = value + 0x100000000
-        else:
-            uint_value = value
+        regs = rh.uint_to_register(value, address.length)
+        self.set_registers(address, regs)
 
-        self.set_uint32(reg_type, address, uint_value & 0xFFFFFFFF)
+    def get_float(self, address: RegisterRange) -> float:
+        """
+        Gets a float/double value from the internal buffer for the specified register range.
 
-    # TODO: add more get_/set_ methods for other data types (float, bool, etc.)
-    # TODO: outsource helper methods for data type conversions
+        The data type is float32 for length 2 and float64 for length 4.
+
+        :param self: The ModbusInterface instance
+        :type self: ModbusInterface
+        :param address: The register range
+        :type address: RegisterRange
+        :return: The float/double value at the specified register address
+        :rtype: float
+        """
+
+        regs = self.get_registers(address)
+        return rh.register_to_float(regs)
+
+    def set_float(self, address: RegisterRange, value: float):
+        """
+        Sets a float/double value in the internal buffer for the specified register range.
+
+        The data type is float32 for length 2 and float64 for length 4.
+
+        There is no range checking on the value, it is assumed to fit in the specified register range.
+
+        To actually write the value to the Modbus server, call :func:`write_registers` afterwards.
+
+        :param self: The ModbusInterface instance
+        :param address: The register range
+        :type address: RegisterRange
+        :param value: The float/double value to set at the specified register address
+        :type value: float
+        """
+
+        regs = rh.float_to_register(value, address.length)
+        self.set_registers(address, regs)

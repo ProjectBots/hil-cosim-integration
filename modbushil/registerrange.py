@@ -8,7 +8,24 @@ class RegisterRange:
         self.type: ModbusRegisterTypes = reg_type
 
     def __repr__(self) -> str:
-        return f"RegisterRange(start={self.start}, length={self.length}, type={self.type})"
+        return (
+            f"RegisterRange(start={self.start}, length={self.length}, type={self.type})"
+        )
+
+    def contains_range(self, other: "RegisterRange") -> bool:
+        """
+        Checks if this register range fully contains another register range.
+
+        :param other: the other register range to check
+        :type other: RegisterRange
+        :return: True if this range contains the other range, False otherwise
+        :rtype: bool
+        """
+        if self.type != other.type:
+            return False
+        return self.start <= other.start and (self.start + self.length) >= (
+            other.start + other.length
+        )
 
     @staticmethod
     def parse_registerrange(
@@ -37,8 +54,9 @@ class RegisterRange:
         fchar = range_str[0]
 
         reg_type = reg_type_override
-        if reg_type_override is None and not fchar.isdigit():
-            reg_type = ModbusRegisterTypes.parse_regtype(fchar)
+        if not fchar.isdigit():
+            if reg_type_override is None:
+                reg_type = ModbusRegisterTypes.parse_regtype(fchar)
             range_str = range_str[1:]
 
         if reg_type is None:
