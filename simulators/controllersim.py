@@ -1,4 +1,5 @@
 import mosaik_api_v3
+import helperutils as hu
 
 META = {
     "api_version": "3.0",
@@ -75,7 +76,7 @@ class BatteryControllerSim(mosaik_api_v3.Simulator):
 
             self.last_targets[eid].pop(0)
             self.last_targets[eid].append(target)
-            self.entities[eid]["P_target[MW]"] = float(target)
+            self.entities[eid]["P_target[MW]"] = hu.clamp(target, -pow(2.0, 15) / 1.0e6, pow(2.0, 15) / 1.0e6)
 
         return time + self.step_size
 

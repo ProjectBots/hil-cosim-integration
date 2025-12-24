@@ -10,7 +10,7 @@ class DataType(Enum):
     int64 = "int64"
     float32 = "float32"
     float64 = "float64"
-    # string = "string"   #TODO: implement string
+    bool = "bool"
 
     @classmethod
     def from_string(cls, s: str) -> "DataType":
@@ -23,11 +23,15 @@ class DataType(Enum):
             return DataType.uint32
         elif s_lower == "int32" or s_lower == "int":
             return DataType.int32
+        elif s_lower == "uint64" or s_lower == "ulong":
+            return DataType.uint64
+        elif s_lower == "int64" or s_lower == "long":
+            return DataType.int64
         elif s_lower == "float32" or s_lower == "float":
             return DataType.float32
         elif s_lower == "float64" or s_lower == "double":
             return DataType.float64
-        #elif s_lower == "string": # TODO: uncomment when implemented
-        #    return DataType.string
+        elif s_lower == "bool" or s_lower == "boolean":
+            return DataType.bool
         else:
             raise ValueError(f"Invalid DataType string: {s}")

@@ -1,5 +1,6 @@
 from typing import Any
 
+from modbushil.datatype import DataType
 from modbushil.methodinvoker import MethodInvoker
 from modbushil.iotype import IOType
 from modbushil.modbusiobundlesconfiguration import ModbusIOBundlesConfiguration
@@ -21,9 +22,8 @@ class ModbusIntegrationSettings:
             if "read" in method_configs:
                 self.read_methods = [MethodInvoker(m) for m in method_configs["read"]]
             if "write" in method_configs:
-                self.write_methods = [
-                    MethodInvoker(m) for m in method_configs["write"]
-                ]
+                self.write_methods = [MethodInvoker(m) for m in method_configs["write"]]
+        self.check_validity()
 
     def check_validity(self) -> None:
         # read cycle: all varaibles shown to Mosaik must be valid
@@ -105,17 +105,28 @@ class ModbusIntegrationSettings:
                 raise ValueError(
                     f"Variable '{var_name}' is mapped to register {var.register} which is not included in any write range."
                 )
-    
+
     def get_mosaik_non_trigger_variables(self) -> list[str]:
         vars_list: list[str] = []
         for var_name, var in self.variables.items():
-            if var.mosaik and var.io_type in (IOType.READ, IOType.BOTH):
+            if var.mosaik and var.io_type in (IOType.WRITE, IOType.BOTH):
                 vars_list.append(var_name)
         return vars_list
 
     def get_mosaik_persistent_variables(self) -> list[str]:
         vars_list: list[str] = []
         for var_name, var in self.variables.items():
-            if var.mosaik and var.io_type in (IOType.WRITE, IOType.BOTH):
+            if var.mosaik and var.io_type in (IOType.READ, IOType.BOTH):
                 vars_list.append(var_name)
         return vars_list
+
+    def get_mosaik_persistent_variables_defaults(self) -> dict[str, Any]:
+        vars_dict: dict[str, Any] = {}
+        for var_name, var in self.variables.items():
+            if var.mosaik and var.io_type in (IOType.READ, IOType.BOTH):
+                if var.data_type == DataType.bool:
+                    vars_dict[var_name] = False
+                else:
+                    vars_dict[var_name] = 0
+
+        return vars_dict

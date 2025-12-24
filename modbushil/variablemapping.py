@@ -6,8 +6,8 @@ from modbushil.registerrange import RegisterRange
 
 class VariableMapping:
     def __init__(self, var_config: dict[str, Any]):
-        self.io_type: IOType = IOType.from_string(var_config["io_type"])
-        self.data_type: DataType = DataType.from_string(var_config["data_type"])
+        self.io_type: IOType = IOType.from_string(var_config["iotype"])
+        self.data_type: DataType = DataType.from_string(var_config["datatype"])
 
         self.register: RegisterRange | None = None
         if "register" in var_config:

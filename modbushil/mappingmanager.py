@@ -1,15 +1,13 @@
-from modbusclientmanager import ModbusClientManager
-from modbusintegrationsettings import ModbusIntegrationSettings
-from variablemapping import VariableMapping
-from iotype import IOType
+from modbushil.modbusclientmanager import ModbusClientManager
+from modbushil.modbusintegrationsettings import ModbusIntegrationSettings
+from modbushil.variablemapping import VariableMapping
+from modbushil.iotype import IOType
 from typing import Any
-from datatype import DataType
+from modbushil.datatype import DataType
 
 
 class MappingManager:
     def __init__(self, config: ModbusIntegrationSettings, host: str, port: int):
-        config.check_validity()
-
         self.config: ModbusIntegrationSettings = config
 
         self.variable_buffer: dict[str, Any] = {}
@@ -25,8 +23,8 @@ class MappingManager:
     def get_variable_mapping(self, variable_name: str) -> VariableMapping:
         return self.config.variables[variable_name]
 
-    def read_cycle(self) -> None:
-        self.modbus_manager.read_registers()
+    def read_phase(self) -> None:
+        self.modbus_manager.do_read()
 
         # direct variable mappings
         for var_name, var in self.config.variables.items():
@@ -43,20 +41,13 @@ class MappingManager:
                 value = self.modbus_manager.get_uint(var.register)
             elif var.data_type in (DataType.float32, DataType.float64):
                 value = self.modbus_manager.get_float(var.register)
+            elif var.data_type == DataType.bool:
+                value = self.modbus_manager.get_bool(var.register)
             else:
                 raise ValueError(f"Unsupported data type: {var.data_type}")
 
-            if var.scale != 1.0:
+            if var.scale != 1.0 and var.data_type != DataType.bool:
                 value = value * var.scale
-                if var.data_type in (
-                    DataType.int16,
-                    DataType.int32,
-                    DataType.int64,
-                    DataType.uint16,
-                    DataType.uint32,
-                    DataType.uint64,
-                ):
-                    value = int(value)
 
             self.variable_buffer[var_name] = value
 
@@ -65,7 +56,7 @@ class MappingManager:
             result = method.invoke(self.variable_buffer)
             self.variable_buffer[method.variable] = result
 
-    def write_cycle(self) -> None:
+    def write_phase(self) -> None:
         # write methods
         for method in self.config.write_methods:
             result = method.invoke(self.variable_buffer)
@@ -83,17 +74,8 @@ class MappingManager:
                 raise ValueError(f"Variable '{var_name}' not found in variable buffer.")
 
             value = self.variable_buffer[var_name]
-            if var.scale != 1.0:
+            if var.scale != 1.0 and var.data_type != DataType.bool:
                 value = value / var.scale
-                if var.data_type in (
-                    DataType.int16,
-                    DataType.int32,
-                    DataType.int64,
-                    DataType.uint16,
-                    DataType.uint32,
-                    DataType.uint64,
-                ):
-                    value = int(value)
 
             if var.data_type in (DataType.int16, DataType.int32, DataType.int64):
                 self.modbus_manager.set_int(var.register, int(value))
@@ -101,13 +83,25 @@ class MappingManager:
                 self.modbus_manager.set_uint(var.register, int(value))
             elif var.data_type in (DataType.float32, DataType.float64):
                 self.modbus_manager.set_float(var.register, float(value))
+            elif var.data_type == DataType.bool:
+                self.modbus_manager.set_bool(var.register, bool(value))
             else:
                 raise ValueError(f"Unsupported data type: {var.data_type}")
 
-        self.modbus_manager.write_registers()
+        self.modbus_manager.do_write()
 
     def get_variable_value(self, variable_name: str) -> Any:
-        return self.variable_buffer.get(variable_name, None)
+        return self.variable_buffer[variable_name]
 
     def set_variable_value(self, variable_name: str, value: Any) -> None:
         self.variable_buffer[variable_name] = value
+
+    def update_variable_buffer(self, vars: dict[str, Any]) -> None:
+        for var_name, value in vars.items():
+            self.set_variable_value(var_name, value)
+
+    def get_all_mosaik_persistent_variables(self) -> dict[str, Any]:
+        result = {}
+        for var_name in self.config.get_mosaik_persistent_variables():
+            result[var_name] = self.get_variable_value(var_name)
+        return result

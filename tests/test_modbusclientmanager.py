@@ -63,11 +63,11 @@ class TestModbusClientManager(TestCase):
             "localhost", 502, io_config, modbus_client=mock_client
         )
 
-        manager.read_registers()
+        manager.do_read()
 
         mock_client.read_holding_registers.assert_called_once_with(0, 5)
         self.assertEqual(
-            manager.buffer_register[ModbusRegisterTypes.HOLDING_REGISTER][0],
+            manager.buffer_register_read[ModbusRegisterTypes.HOLDING_REGISTER][0],
             [1, 2, 3, 4, 5],
         )
 
@@ -81,7 +81,7 @@ class TestModbusClientManager(TestCase):
         manager = ModbusClientManager(
             "localhost", 502, io_config, modbus_client=mock_client
         )
-        manager.buffer_register[ModbusRegisterTypes.HOLDING_REGISTER][10] = [
+        manager.buffer_register_write[ModbusRegisterTypes.HOLDING_REGISTER][10] = [
             10,
             20,
             30,
@@ -89,7 +89,7 @@ class TestModbusClientManager(TestCase):
             50,
         ]
 
-        manager.write_registers()
+        manager.do_write()
 
         mock_client.write_multiple_registers.assert_called_once_with(
             10, [10, 20, 30, 40, 50]
@@ -103,7 +103,7 @@ class TestModbusClientManager(TestCase):
         manager = ModbusClientManager(
             "localhost", 502, io_config, modbus_client=mock_client
         )
-        manager.buffer_register[ModbusRegisterTypes.HOLDING_REGISTER][5] = [
+        manager.buffer_register_read[ModbusRegisterTypes.HOLDING_REGISTER][5] = [
             100,
             200,
             300,
@@ -135,6 +135,6 @@ class TestModbusClientManager(TestCase):
         )
 
         self.assertEqual(
-            manager.buffer_register[ModbusRegisterTypes.HOLDING_REGISTER][8],
+            manager.buffer_register_write[ModbusRegisterTypes.HOLDING_REGISTER][8],
             [7, 14, 21, 28],
         )

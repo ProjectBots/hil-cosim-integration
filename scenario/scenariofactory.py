@@ -4,6 +4,7 @@ import mosaik
 import mosaik.util as mu
 import scenario.gridfactory as gridfactory
 from typing import Any
+import os
 
 
 START = datetime(2020, 6, 1, 10, 0, 0)
@@ -36,23 +37,38 @@ def get_node_by_id(grid, type, id) -> Any:
     raise ValueError(f"Node of type {type} with id {id} not found in grid")
 
 
-def add_simple_scenario(world: mosaik.World, use_async_battery: bool):
+def add_simple_scenario(
+    world: mosaik.World, use_async_battery: bool, use_real_battery: bool
+):
     pv_sim = world.start("PVSim", step_size=1, sim_params=PVSIM_PARAMS)
     pp_sim = world.start("PPSim", step_size=1)
     battery_sim = world.start("BatterySim", step_size=1, use_async=use_async_battery)
     ev_sim = world.start("EVSim", step_size=1)
     ctrl_sim = world.start("ControllerSim", step_size=1)
-    webvis = world.start(
-        "WebVis", start_date=START.isoformat(sep=" "), step_size=1
-    )
+    webvis = world.start("WebVis", start_date=START.isoformat(sep=" "), step_size=1)
 
     griddata = gridfactory.create_net()
 
     pv_model = pv_sim.PVSim.create(1, **PVMODEL_PARAMS)[0]
     grid = pp_sim.Grid(net=griddata["net"]).children
-    battery = battery_sim.BatteryModel.create(
-        1, e_max_mwh=1000 / 1e6, p_max_gen_mw=3000 / 1e6, p_max_load_mw=3000 / 1e6
-    )[0]
+    if not use_real_battery:
+        battery = battery_sim.BatterySim.create(
+            1, e_max_mwh=1000 / 1e6, p_max_gen_mw=3000 / 1e6, p_max_load_mw=3000 / 1e6
+        )[0]
+    else:
+        host = os.getenv("HOST", "localhost")
+        if not host:
+            raise ValueError("HOST environment variable not set")
+        port_str = os.getenv("PORT", "5001")
+        if not port_str:
+            raise ValueError("PORT environment variable not set")
+        try:
+            port = int(port_str)
+        except ValueError | TypeError:
+            raise ValueError("PORT environment variable is not a valid integer")
+
+        battery = battery_sim.BatterySim.create(1, host=host, port=port)[0]
+
     ev = ev_sim.EVModel.create(1, p_charge_mw=2500 / 1e6)[0]
     controller = ctrl_sim.BatteryControllerSim.create(1)[0]
 
@@ -111,6 +127,14 @@ def add_simple_scenario(world: mosaik.World, use_async_battery: bool):
                 "max": PVMODEL_PARAMS["scale_factor"],
             },
             "BatteryModel": {
+                "cls": "battery",
+                "attr": "SoC",
+                "unit": "SoC",
+                "default": 0.0,
+                "min": 0.0,
+                "max": 1.0,
+            },
+            "BatterySim": {
                 "cls": "battery",
                 "attr": "SoC",
                 "unit": "SoC",

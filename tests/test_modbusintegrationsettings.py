@@ -12,21 +12,21 @@ class TestModbusIntegrationSettings(TestCase):
             },
             "variables": {
                 "var1": {
-                    "data_type": "int",
+                    "datatype": "int",
                     "register": "H0",
-                    "io_type": "read",
+                    "iotype": "read",
                     "mosaik": True,
                 },
                 "var2": {
-                    "data_type": "int",
+                    "datatype": "int",
                     "register": "H5",
-                    "io_type": "read",
+                    "iotype": "read",
                     "mosaik": False,
                 },
                 "var3": {
-                    "data_type": "int",
+                    "datatype": "int",
                     "register": "H25",
-                    "io_type": "write",
+                    "iotype": "write",
                     "mosaik": True,
                 },
             },
@@ -51,16 +51,15 @@ class TestModbusIntegrationSettings(TestCase):
             },
             "variables": {
                 "var1": {
-                    "data_type": "int",
+                    "datatype": "int",
                     "register": "H15",
-                    "io_type": "read",
+                    "iotype": "read",
                     "mosaik": True,
                 },
             },
         }
-        settings = ModbusIntegrationSettings(config)
         with self.assertRaises(ValueError) as context:
-            settings.check_validity()
+            ModbusIntegrationSettings(config)
         self.assertIn("is mapped to register", str(context.exception))
 
     def test_check_validity_failure_invalid_method_variable(self):
@@ -80,9 +79,8 @@ class TestModbusIntegrationSettings(TestCase):
                 ]
             },
         }
-        settings = ModbusIntegrationSettings(config)
         with self.assertRaises(ValueError) as context:
-            settings.check_validity()
+            ModbusIntegrationSettings(config)
         self.assertIn(
             "requires variable 'var3' which is not valid", str(context.exception)
         )
@@ -95,15 +93,14 @@ class TestModbusIntegrationSettings(TestCase):
             },
             "variables": {
                 "var1": {
-                    "data_type": "int",
-                    "io_type": "read",
+                    "datatype": "int",
+                    "iotype": "read",
                     "mosaik": True,
                 },
             },
         }
-        settings = ModbusIntegrationSettings(config)
         with self.assertRaises(ValueError) as context:
-            settings.check_validity()
+            ModbusIntegrationSettings(config)
         self.assertIn(
             "is marked for Mosaik but is not valid in read cycle",
             str(context.exception),
