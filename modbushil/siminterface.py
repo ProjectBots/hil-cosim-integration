@@ -1,14 +1,12 @@
 import mosaik_api_v3
-
+import time  # Added for RTT measurement
 from modbushil.mappingmanager import MappingManager
 from typing import Any
-
 
 import threading
 import asyncio
 import concurrent.futures as cf
 from modbushil.modbusintegrationsettings import ModbusIntegrationSettings
-
 
 class ModbusSimInterface(mosaik_api_v3.Simulator):
     metadata: dict[str, Any] = {
@@ -38,6 +36,10 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
         self.loop: asyncio.AbstractEventLoop
         self.resp_future: dict[str, cf.Future[dict[str, float]]] = {}
         self.entity_public: dict[str, dict[str, float]] = {}
+        
+        # New: List to store the RTT of every step
+        self.step_durations = [] 
+        
         super().__init__(self.metadata)
 
     def init(self, sid, time_resolution: float, step_size: int, use_async: bool):
@@ -51,6 +53,20 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
         return self.meta
 
     def finalize(self):
+        # New: Calculate and print RTT statistics before closing
+        if self.step_durations:
+            min_rtt = min(self.step_durations)
+            max_rtt = max(self.step_durations)
+            avg_rtt = sum(self.step_durations) / len(self.step_durations)
+
+            print("\n" + "="*40)
+            print("MODBUS ROUND TRIP TIME (RTT) STATISTICS")
+            print(f"Total Steps Measured: {len(self.step_durations)}")
+            print(f"Minimum RTT:          {min_rtt:.6f} seconds")
+            print(f"Maximum RTT:          {max_rtt:.6f} seconds")
+            print(f"Average RTT:          {avg_rtt:.6f} seconds")
+            print("="*40 + "\n")
+
         if self.step_size <= 0:
             return super().finalize()
 
@@ -82,9 +98,13 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
 
         return result
 
-    def step(self, time, inputs, max_advance):
+    def step(self, time_val, inputs, max_advance):
+        # New: Start timer for this step
+        step_start = time.perf_counter()
+
         for eid, attrs in inputs.items():
             if self.use_async:
+                # In async mode, we wait for the previous step's Modbus result to resolve
                 self.entity_public[eid].update(self.resp_future[eid].result())
 
                 vars = {v: sum(vals.values()) for v, vals in attrs.items()}
@@ -94,13 +114,18 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
                     self.loop,
                 )
             else:
+                # In sync mode, we perform the Modbus read/write immediately
                 vars = {v: sum(vals.values()) for v, vals in attrs.items()}
                 result = ModbusSimInterface.fetch_entity_data(
                     self.modbus_manager[eid], vars
                 )
                 self.entity_public[eid].update(result)
 
-        return time + self.step_size
+        # New: Record the total time spent in this step
+        step_end = time.perf_counter()
+        self.step_durations.append(step_end - step_start)
+
+        return time_val + self.step_size
 
     async def fetch_entity_data_async(
         self, mapping_manager: MappingManager, vars: dict[str, Any]
@@ -114,9 +139,9 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
         cls, mapping_manager: MappingManager, vars: dict[str, Any]
     ) -> dict[str, Any]:
         mapping_manager.update_variable_buffer(vars)
-        mapping_manager.write_phase()
+        mapping_manager.write_phase() # Writes to hardware registers
 
-        mapping_manager.read_phase()
+        mapping_manager.read_phase()  # Reads from hardware registers
         return mapping_manager.get_all_mosaik_persistent_variables()
 
     def get_data(self, outputs):
