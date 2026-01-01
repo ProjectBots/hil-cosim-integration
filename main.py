@@ -1,7 +1,7 @@
 import mosaik
 import scenario.scenariofactory as scenariofactory
 import helperutils as hu
-from modbushil.siminterface import ModbusSimInterface
+from modbushil.configurationmanager import ConfigurationManager
 
 from dotenv import load_dotenv
 
@@ -103,7 +103,7 @@ def main():
     use_real_battery = hu.get_bool_env_var("USE_REAL_BATTERY", False)
 
     if use_real_battery:
-        ModbusSimInterface.registerModel("BatterySim", REAL_BATTERY_PARAMS)
+        ConfigurationManager.registerModel("BatterySim", REAL_BATTERY_PARAMS)
 
     sim_config: mosaik.SimConfig = {
         "BatterySim": {

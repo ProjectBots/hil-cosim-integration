@@ -1,35 +1,36 @@
 import mosaik_api_v3
 import time  # Added for RTT measurement
 from modbushil.mappingmanager import MappingManager
+from modbushil.configurationmanager import ConfigurationManager
 from typing import Any
 
 import threading
 import asyncio
 import concurrent.futures as cf
-from modbushil.modbusintegrationsettings import ModbusIntegrationSettings
 
 class ModbusSimInterface(mosaik_api_v3.Simulator):
     metadata: dict[str, Any] = {
         "api_version": "3.0",
         "type": "time-based",
-        "models": {},  # to be filled by registerModel
+        "models": {},  # to be filled in __init__
     }
-    modbus_config: dict[str, ModbusIntegrationSettings] = {}
+
     instance_counter: dict[str, int] = {}
 
-    @classmethod
-    def registerModel(cls, modelname: str, config: dict[str, Any]):
-        settings = ModbusIntegrationSettings(config)
-        cls.modbus_config[modelname] = settings
-        cls.metadata["models"][modelname] = {
-            "public": True,
-            "params": ["host", "port"],
-            "non-trigger": settings.get_mosaik_non_trigger_variables(),
-            "persistent": settings.get_mosaik_persistent_variables(),
-        }
-        cls.instance_counter[modelname] = 0
-
     def __init__(self):
+        for modelname in ConfigurationManager.configs.keys():
+            self.metadata["models"][modelname] = {
+                "public": True,
+                "params": ["host", "port"],
+                "non-trigger": ConfigurationManager.configs[
+                    modelname
+                ].get_mosaik_non_trigger_variables(),
+                "persistent": ConfigurationManager.configs[
+                    modelname
+                ].get_mosaik_persistent_variables(),
+            }
+            self.instance_counter[modelname] = 0
+
         self.modbus_manager: dict[str, MappingManager] = {}
         self.step_size: int = -1  # negative value indicates uninitialized
         self.use_async: bool = False
@@ -44,7 +45,7 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
 
     def init(self, sid, time_resolution: float, step_size: int, use_async: bool):
         if step_size <= 0:
-            raise ValueError("Step size must be positive")
+            raise ValueError("Step size must be positive and non-zero")
         self.step_size = step_size
         self.use_async = use_async
         if self.use_async:
@@ -79,18 +80,20 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
     def create(self, num: int, model: str, host: str, port: int):
         result = []
         for _ in range(num):
-            if model not in self.modbus_config:
+            if model not in ConfigurationManager.configs:
                 raise ValueError(f"Model {model} not registered")
 
             eid = f"{model}_{host}_{port}_{self.instance_counter[model]}"
             self.instance_counter[model] += 1
             self.modbus_manager[eid] = MappingManager(
-                host=host, port=port, config=self.modbus_config[model]
+                host=host, port=port, config=ConfigurationManager.configs[model]
             )
             if self.use_async:
                 self.resp_future[eid] = cf.Future()
                 self.resp_future[eid].set_result(
-                    self.modbus_config[model].get_mosaik_persistent_variables_defaults()
+                    ConfigurationManager.configs[
+                        model
+                    ].get_mosaik_persistent_variables_defaults()
                 )
 
             self.entity_public[eid] = {}
