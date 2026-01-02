@@ -103,7 +103,7 @@ def main():
     use_real_battery = hu.get_bool_env_var("USE_REAL_BATTERY", False)
 
     if use_real_battery:
-        ConfigurationManager.registerModel("BatterySim", REAL_BATTERY_PARAMS)
+        ConfigurationManager.register_model("BatterySim", REAL_BATTERY_PARAMS)
 
     sim_config: mosaik.SimConfig = {
         "BatterySim": {

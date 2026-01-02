@@ -8,6 +8,7 @@ import threading
 import asyncio
 import concurrent.futures as cf
 
+
 class ModbusSimInterface(mosaik_api_v3.Simulator):
     metadata: dict[str, Any] = {
         "api_version": "3.0",
@@ -18,16 +19,16 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
     instance_counter: dict[str, int] = {}
 
     def __init__(self):
-        for modelname in ConfigurationManager.configs.keys():
+        for modelname in ConfigurationManager.get_registered_models():
             self.metadata["models"][modelname] = {
                 "public": True,
                 "params": ["host", "port"],
-                "non-trigger": ConfigurationManager.configs[
+                "non-trigger": ConfigurationManager.get_model_config(
                     modelname
-                ].get_mosaik_non_trigger_variables(),
-                "persistent": ConfigurationManager.configs[
+                ).get_mosaik_non_trigger_variables(),
+                "persistent": ConfigurationManager.get_model_config(
                     modelname
-                ].get_mosaik_persistent_variables(),
+                ).get_mosaik_persistent_variables(),
             }
             self.instance_counter[modelname] = 0
 
@@ -37,10 +38,10 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
         self.loop: asyncio.AbstractEventLoop
         self.resp_future: dict[str, cf.Future[dict[str, float]]] = {}
         self.entity_public: dict[str, dict[str, float]] = {}
-        
+
         # New: List to store the RTT of every step
-        self.step_durations = [] 
-        
+        self.step_durations = []
+
         super().__init__(self.metadata)
 
     def init(self, sid, time_resolution: float, step_size: int, use_async: bool):
@@ -60,13 +61,13 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
             max_rtt = max(self.step_durations)
             avg_rtt = sum(self.step_durations) / len(self.step_durations)
 
-            print("\n" + "="*40)
+            print("\n" + "=" * 40)
             print("MODBUS ROUND TRIP TIME (RTT) STATISTICS")
             print(f"Total Steps Measured: {len(self.step_durations)}")
             print(f"Minimum RTT:          {min_rtt:.6f} seconds")
             print(f"Maximum RTT:          {max_rtt:.6f} seconds")
             print(f"Average RTT:          {avg_rtt:.6f} seconds")
-            print("="*40 + "\n")
+            print("=" * 40 + "\n")
 
         if self.step_size <= 0:
             return super().finalize()
@@ -80,20 +81,19 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
     def create(self, num: int, model: str, host: str, port: int):
         result = []
         for _ in range(num):
-            if model not in ConfigurationManager.configs:
-                raise ValueError(f"Model {model} not registered")
-
             eid = f"{model}_{host}_{port}_{self.instance_counter[model]}"
             self.instance_counter[model] += 1
             self.modbus_manager[eid] = MappingManager(
-                host=host, port=port, config=ConfigurationManager.configs[model]
+                host=host,
+                port=port,
+                config=ConfigurationManager.get_model_config(model),
             )
             if self.use_async:
                 self.resp_future[eid] = cf.Future()
                 self.resp_future[eid].set_result(
-                    ConfigurationManager.configs[
+                    ConfigurationManager.get_model_config(
                         model
-                    ].get_mosaik_persistent_variables_defaults()
+                    ).get_mosaik_persistent_variables_defaults()
                 )
 
             self.entity_public[eid] = {}
@@ -142,7 +142,7 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
         cls, mapping_manager: MappingManager, vars: dict[str, Any]
     ) -> dict[str, Any]:
         mapping_manager.update_variable_buffer(vars)
-        mapping_manager.write_phase() # Writes to hardware registers
+        mapping_manager.write_phase()  # Writes to hardware registers
 
         mapping_manager.read_phase()  # Reads from hardware registers
         return mapping_manager.get_all_mosaik_persistent_variables()
