@@ -83,17 +83,16 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
         for _ in range(num):
             eid = f"{model}_{host}_{port}_{self.instance_counter[model]}"
             self.instance_counter[model] += 1
+            model_config = ConfigurationManager.get_model_config(model)
             self.modbus_manager[eid] = MappingManager(
                 host=host,
                 port=port,
-                config=ConfigurationManager.get_model_config(model),
+                config=model_config,
             )
             if self.use_async:
                 self.resp_future[eid] = cf.Future()
                 self.resp_future[eid].set_result(
-                    ConfigurationManager.get_model_config(
-                        model
-                    ).get_mosaik_persistent_variables_defaults()
+                    model_config.get_mosaik_persistent_variables_defaults()
                 )
 
             self.entity_public[eid] = {}
