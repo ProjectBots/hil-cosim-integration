@@ -5,7 +5,7 @@ META = {
     "api_version": "3.0",
     "type": "time-based",
     "models": {
-        "BatteryControllerSim": {
+        "BatteryDirector": {
             "public": True,
             "params": [],
             "trigger": [],

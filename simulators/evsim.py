@@ -7,7 +7,7 @@ META = {
     "api_version": "3.0",
     "type": "time-based",
     "models": {
-        "EVModel": {
+        "EVSim": {
             "public": True,
             "params": ["p_charge_mw"],
             "non-trigger": [],

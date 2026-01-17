@@ -103,7 +103,7 @@ def main():
     use_real_battery = hu.get_bool_env_var("USE_REAL_BATTERY", False)
 
     if use_real_battery:
-        ConfigurationManager.register_model("BatterySim", REAL_BATTERY_PARAMS)
+        ConfigurationManager.register_model("Battery", REAL_BATTERY_PARAMS)
 
     sim_config: mosaik.SimConfig = {
         "BatterySim": {
@@ -128,6 +128,9 @@ def main():
         },
         "DebugSim": {
             "python": "simulators.debugsim:DebugSim",
+        },
+        "CSV_writer": {
+            "python": "mosaik_csv_writer:CSVWriter",
         },
     }
 
