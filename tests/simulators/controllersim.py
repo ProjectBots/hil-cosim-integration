@@ -1,7 +1,7 @@
 
 import mosaik_api_v3
 
-import tests.helperutils as hu
+import tests.helpers.helperutils as hu
 
 META = {
     "api_version": "3.0",

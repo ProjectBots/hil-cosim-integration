@@ -11,15 +11,37 @@ import pandapower as pp
 
 from modbushil.configurationmanager import ConfigurationManager
 
-import tests.helperutils as hu
+import tests.helpers.helperutils as hu
 
+
+""" Scenario test for presentation purposes. 
+
+This scenario simulates a simple grid with a PV system, a battery, and an EV.
+The battery can either be a real Modbus-connected battery or a simulated one.
+The battery is controlled by a simple controller that adjusts its target power
+based on the grid power flow.
+
+Please setup a .env file in the workspace-root directory with the following
+variables:
+USE_REAL_BATTERY=True
+HOST=<IP_ADDRESS_OF_MODBUS_BATTERY>
+PORT=<PORT_OF_MODBUS_BATTERY>
+
+You can use the provided Modbus battery emulator for testing purposes.
+It will use the same .env file for HOST and PORT.
+(HOST should probably be "localhost" and PORT can be any free port, e.g., 5020)
+
+If you are going to use an actual Battery HIL setup, you most likely have to adjust the
+MODBUS_HIL_CONFIG_BATTERY in this file to match your Modbus register mapping.
+
+"""
 
 START = datetime(2020, 6, 1, 10, 0, 0)
 
 STEP_SIZE_SECONDS = 0.5
 STEPS_TOTAL = 500
 
-REAL_BATTERY_PARAMS = {
+MODBUS_HIL_CONFIG_BATTERY = {
     "modbus_io_bundles": {
         "read": {"holding_register": ["2-4"]},
         "write": {"holding_register": ["1-2"]},
@@ -141,7 +163,7 @@ def main() -> None:
     use_real_battery = hu.get_bool_env_var("USE_REAL_BATTERY", False)
 
     if use_real_battery:
-        ConfigurationManager.register_model("Battery", REAL_BATTERY_PARAMS)
+        ConfigurationManager.register_model("Battery", MODBUS_HIL_CONFIG_BATTERY)
 
     sim_config: mosaik.SimConfig = {
         "BatterySim": {

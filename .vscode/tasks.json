@@ -4,7 +4,7 @@
 		{
 			"label": "Run Modbus Battery Emulator",
 			"type": "shell",
-			"command": "uv run -m tests.batteryemulator",
+			"command": "uv run -m tests.helpers.batteryemulator",
 			"group": {
 				"kind": "build",
 				"isDefault": true

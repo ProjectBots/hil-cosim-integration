@@ -2,7 +2,7 @@ import random as rnd
 
 import mosaik_api_v3
 
-import tests.helperutils as hu
+import tests.helpers.helperutils as hu
 
 
 META = {

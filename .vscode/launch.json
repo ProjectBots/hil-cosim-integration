@@ -4,7 +4,7 @@
 			"name": "Python Debugger: Main",
 			"type": "debugpy",
 			"request": "launch",
-			"program": "${workspaceFolder}/tests/scenario_for_presentation.py",
+			"program": "${workspaceFolder}/tests/scenariotests/scenario_for_presentation.py",
 			"console": "integratedTerminal",
 			"env": {
 				"PYTHONPATH": "${workspaceFolder}"
