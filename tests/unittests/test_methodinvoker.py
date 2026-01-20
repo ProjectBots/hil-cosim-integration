@@ -38,8 +38,8 @@ class TestMethodInvoker(TestCase):
         self.assertEqual(result, 10)
 
     def test_function_with_parameters(self):
-        def multiply(x, y):
-            return x * y
+        def multiply(a, b):
+            return a * b
 
         config = {
             "set": "product",

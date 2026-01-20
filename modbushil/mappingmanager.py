@@ -47,7 +47,7 @@ class MappingManager:
             else:
                 raise ValueError(f"Unsupported data type: {var.data_type}")
 
-            if var.scale != 1.0 and var.data_type != DataType.bool:
+            if var.scale is not None:
                 value = value * var.scale
 
             self.variable_buffer[var_name] = value
@@ -75,7 +75,7 @@ class MappingManager:
                 raise ValueError(f"Variable '{var_name}' not found in variable buffer.")
 
             value = self.variable_buffer[var_name]
-            if var.scale != 1.0 and var.data_type != DataType.bool:
+            if var.scale is not None:
                 value = value / var.scale
 
             if var.data_type in (DataType.int16, DataType.int32, DataType.int64):

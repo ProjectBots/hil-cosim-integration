@@ -74,22 +74,18 @@ MODBUS_HIL_CONFIG_BATTERY = {
         },
         "P_load[MW]": {
             "iotype": "read",
-            "datatype": "float",
             "mosaik": True,
         },
         "P_gen[MW]": {
             "iotype": "read",
-            "datatype": "float",
             "mosaik": True,
         },
         "P[MW]": {
             "iotype": "read",
-            "datatype": "float",
             "mosaik": True,
         },
         "SoC": {
             "iotype": "read",
-            "datatype": "float",
             "mosaik": True,
         },
     },
