@@ -148,6 +148,9 @@ class ModbusClientManager:
                     raise ConnectionError(
                         f"Failed to write {reg_type.name} registers to Modbus server"
                     )
+    
+    # TODO: implement combined read_write function to utilize Modbus function code 23 (Read/Write Multiple Registers)
+
 
     def get_registers(self, address: RegisterRange) -> list[int]:
         """

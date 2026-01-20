@@ -1,8 +1,19 @@
 import mosaik_api_v3
 
-import simulators.batterymetainfo as batterymetainfo
 import helperutils as hu
 
+BATTERY_MODEL_META_DATA = {
+    "api_version": "3.0",
+    "type": "time-based",
+    "models": {
+        "Battery": {
+            "public": True,
+            "params": ["e_max_mwh", "p_max_gen_mw", "p_max_load_mw"],
+            "non-trigger": ["P_target[MW]"],
+            "persistent": ["P_gen[MW]", "P_load[MW]", "SoC", "P[MW]"], # SoC = state of charge
+        },
+    },
+}
 
 class BatteryModel(mosaik_api_v3.Simulator):
     time_resolution: float
@@ -13,7 +24,7 @@ class BatteryModel(mosaik_api_v3.Simulator):
 
 
     def __init__(self):
-        super().__init__(batterymetainfo.BATTERY_MODEL_META_DATA)
+        super().__init__(BATTERY_MODEL_META_DATA)
         self.entities = {}
         self.buffer = {}
 
