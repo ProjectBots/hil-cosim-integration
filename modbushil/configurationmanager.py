@@ -1,5 +1,6 @@
-from modbushil.modbusintegrationsettings import ModbusIntegrationSettings
 from typing import Any
+
+from .modbusintegrationsettings import ModbusIntegrationSettings
 
 
 class ConfigurationManager:

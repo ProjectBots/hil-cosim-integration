@@ -1,13 +1,113 @@
+
+import os
+from typing import Any
 from datetime import datetime
+
+import dotenv
 
 import mosaik
 import mosaik.util as mu
-import scenario.gridfactory as gridfactory
-from typing import Any
-import os
+import pandapower as pp
+
+from modbushil.configurationmanager import ConfigurationManager
+
+import tests.helperutils as hu
 
 
 START = datetime(2020, 6, 1, 10, 0, 0)
+
+STEP_SIZE_SECONDS = 0.5
+STEPS_TOTAL = 500
+
+REAL_BATTERY_PARAMS = {
+    "modbus_io_bundles": {
+        "read": {"holding_register": ["2-4"]},
+        "write": {"holding_register": ["1-2"]},
+    },
+    "variables": {
+        "P_target[MW]": {
+            "iotype": "write",
+            "datatype": "uint",
+            "register": "h1",
+            "mosaik": True,
+            "scale": 1e-6,
+        },
+        "State": {
+            "iotype": "both",
+            "datatype": "uint",
+            "register": "h2",
+        },
+        "P_out[MW]": {
+            "iotype": "read",
+            "datatype": "int",
+            "register": "h3",
+            "scale": 1e-6,
+        },
+        "E[MWH]": {
+            "iotype": "read",
+            "datatype": "int",
+            "register": "h4",
+            "mosaik": True,
+            "scale": 1e-6,
+        },
+        "P_load[MW]": {
+            "iotype": "read",
+            "datatype": "float",
+            "mosaik": True,
+        },
+        "P_gen[MW]": {
+            "iotype": "read",
+            "datatype": "float",
+            "mosaik": True,
+        },
+        "P[MW]": {
+            "iotype": "read",
+            "datatype": "float",
+            "mosaik": True,
+        },
+        "SoC": {
+            "iotype": "read",
+            "datatype": "float",
+            "mosaik": True,
+        },
+    },
+    "methods": {
+        "read": [
+            {
+                "set": "P[MW]",
+                "action": "eval",
+                "expression": "$(P_out[MW]) * (1 if $(State) == 0 else -1)",
+            },
+            {
+                "set": "P_gen[MW]",
+                "action": "eval",
+                "expression": "max(-$(P[MW]), 0.0)",
+            },
+            {
+                "set": "P_load[MW]",
+                "action": "eval",
+                "expression": "max($(P[MW]), 0.0)",
+            },
+            {
+                "set": "SoC",
+                "action": "eval",
+                "expression": "$(E[MWH]) / (1000 / 1e6)",  # Assuming E_max is 1000 MWH
+            },
+        ],
+        "write": [
+            {
+                "set": "State",
+                "action": "eval",
+                "expression": "0 if $(P_target[MW]) >= 0.0 else 1",
+            },
+            {
+                "set": "P_target[MW]",
+                "action": "eval",
+                "expression": "abs($(P_target[MW]))",
+            },
+        ],
+    },
+}
 
 PVSIM_PARAMS = {
     "start_date": START,
@@ -37,9 +137,45 @@ def get_node_by_id(grid, type, id) -> Any:
     raise ValueError(f"Node of type {type} with id {id} not found in grid")
 
 
-def add_simple_scenario(
-    world: mosaik.World, use_async_battery: bool, use_real_battery: bool
-):
+def main() -> None:
+    use_real_battery = hu.get_bool_env_var("USE_REAL_BATTERY", False)
+
+    if use_real_battery:
+        ConfigurationManager.register_model("Battery", REAL_BATTERY_PARAMS)
+
+    sim_config: mosaik.SimConfig = {
+        "BatterySim": {
+            "python": "modbushil.siminterface:ModbusSimInterface"
+            if use_real_battery
+            else "tests.simulators.batterysim:BatteryModel",
+        },
+        "PPSim": {
+            "python": "mosaik_components.pandapower:Simulator",
+        },
+        "PVSim": {
+            "python": "mosaik_components.pv.pvgis_simulator:PVGISSimulator",
+        },
+        "EVSim": {
+            "python": "tests.simulators.evsim:EVModel",
+        },
+        "ControllerSim": {
+            "python": "tests.simulators.controllersim:BatteryControllerSim",
+        },
+        "WebVis": {
+            "cmd": "mosaik-web -s 127.0.0.1:8000 %(addr)s",
+        },
+        "DebugSim": {
+            "python": "tests.simulators.debugsim:DebugSim",
+        },
+        "CSV_writer": {
+            "python": "mosaik_csv_writer:CSVWriter",
+        },
+    }
+
+    world = mosaik.World(sim_config, time_resolution=STEP_SIZE_SECONDS)
+
+    use_async_battery = hu.get_bool_env_var("USE_ASYNC_BATTERY", True)
+
     pv_sim = world.start("PVSim", step_size=1, sim_params=PVSIM_PARAMS)
     pp_sim = world.start("PPSim", step_size=1)
     battery_sim = world.start("BatterySim", step_size=1, use_async=use_async_battery)
@@ -53,19 +189,41 @@ def add_simple_scenario(
         output_file="results.csv",
     )
 
-    griddata = gridfactory.create_net()
+    net = pp.create_empty_network()
+
+    bcenter = pp.create_bus(net, vn_kv=0.4, name="center")
+    bbat = pp.create_bus(net, vn_kv=0.4, name="battery")
+    bev = pp.create_bus(net, vn_kv=0.4, name="ev")
+    bpv = pp.create_bus(net, vn_kv=0.4, name="pv")
+    bgrid = pp.create_bus(net, vn_kv=0.4, name="grid")
+
+    pp.create_lines(
+        net=net,
+        from_buses=[bcenter, bcenter, bcenter, bcenter],
+        to_buses=[bbat, bev, bpv, bgrid],
+        length_km=[0.01, 0.02, 0.20, 1.0],
+        std_type="NAYY 4x50 SE",
+        names=[
+            "line_center_battery",
+            "line_battery_ev",
+            "line_battery_pv",
+            "line_center_grid",
+        ],
+    )
+
+    pp.create_ext_grid(net, bus=bgrid, vm_pu=1.0, name="Grid_Connection")
 
     pv_model = pv_sim.PVSim.create(1, **PVMODEL_PARAMS)[0]
-    grid = pp_sim.Grid(net=griddata["net"]).children
+    grid = pp_sim.Grid(net=net).children
     if not use_real_battery:
         battery = battery_sim.Battery.create(
             1, e_max_mwh=1000 / 1e6, p_max_gen_mw=3000 / 1e6, p_max_load_mw=3000 / 1e6
         )[0]
     else:
-        host = os.getenv("HOST", "localhost")
+        host = os.getenv("HOST")
         if not host:
             raise ValueError("HOST environment variable not set")
-        port_str = os.getenv("PORT", "5001")
+        port_str = os.getenv("PORT")
         if not port_str:
             raise ValueError("PORT environment variable not set")
         try:
@@ -77,11 +235,11 @@ def add_simple_scenario(
 
     ev_model = ev_sim.EVSim.create(1, p_charge_mw=2500 / 1e6)[0]
     controller = ctrl_sim.BatteryDirector.create(1)[0]
-    csv_writer = csv_sim_writer.CSVWriter(buff_size = 1)
+    csv_writer = csv_sim_writer.CSVWriter(buff_size=1)
 
-    node_bat = get_node_by_id(grid, "Bus", griddata["id_battery"])
-    node_ev = get_node_by_id(grid, "Bus", griddata["id_ev"])
-    node_pv = get_node_by_id(grid, "Bus", griddata["id_pv"])
+    node_bat = get_node_by_id(grid, "Bus", bbat)
+    node_ev = get_node_by_id(grid, "Bus", bev)
+    node_pv = get_node_by_id(grid, "Bus", bpv)
     # there should only be one external grid, but the id is not the same as the one of the connected bus
     node_grid = [elem for elem in grid if elem.type == "ExternalGrid"][0]
 
@@ -177,3 +335,13 @@ def add_simple_scenario(
     mu.connect_many_to_one(
         world, [e for e in grid if e.type == "Bus"], vis_topo, ("P[MW]", "P[MW]")
     )
+
+    # TODO: figure out how to get rid of behind schedule warnings when rt_factor is set
+    world.run(
+        until=STEPS_TOTAL,
+        rt_factor=1.0 if hu.get_bool_env_var("USE_REAL_BATTERY", False) else None,
+    )
+
+if __name__ == "__main__":
+    dotenv.load_dotenv()
+    main()

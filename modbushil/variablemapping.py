@@ -1,7 +1,8 @@
 from typing import Any
-from modbushil.datatype import DataType
-from modbushil.iotype import IOType
-from modbushil.registerrange import RegisterRange
+
+from .datatype import DataType
+from .iotype import IOType
+from .registerrange import RegisterRange
 
 
 class VariableMapping:

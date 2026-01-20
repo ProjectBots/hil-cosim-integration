@@ -1,12 +1,11 @@
-from pyModbusTCP.client import ModbusClient
 from typing import cast
 
-from modbushil.modbusiobundlesconfiguration import ModbusIOBundlesConfiguration
-from modbushil.registerrange import RegisterRange
+from pyModbusTCP.client import ModbusClient
 
+from . import registerhelpers as rh
+from .modbusiobundlesconfiguration import ModbusIOBundlesConfiguration
+from .registerrange import RegisterRange
 from .modbusregistertypes import ModbusRegisterTypes
-
-import modbushil.registerhelpers as rh
 
 
 class ModbusClientManager:

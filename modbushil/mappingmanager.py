@@ -1,9 +1,10 @@
-from modbushil.modbusclientmanager import ModbusClientManager
-from modbushil.modbusintegrationsettings import ModbusIntegrationSettings
-from modbushil.variablemapping import VariableMapping
-from modbushil.iotype import IOType
 from typing import Any
-from modbushil.datatype import DataType
+
+from .modbusclientmanager import ModbusClientManager
+from .modbusintegrationsettings import ModbusIntegrationSettings
+from .variablemapping import VariableMapping
+from .iotype import IOType
+from .datatype import DataType
 
 
 class MappingManager:

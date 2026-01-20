@@ -1,6 +1,7 @@
+
 import mosaik_api_v3
 
-import helperutils as hu
+import tests.helperutils as hu
 
 BATTERY_MODEL_META_DATA = {
     "api_version": "3.0",

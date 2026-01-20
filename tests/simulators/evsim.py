@@ -1,6 +1,8 @@
-import mosaik_api_v3
 import random as rnd
-import helperutils as hu
+
+import mosaik_api_v3
+
+import tests.helperutils as hu
 
 
 META = {

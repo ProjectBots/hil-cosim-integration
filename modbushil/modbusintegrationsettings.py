@@ -1,10 +1,10 @@
 from typing import Any
 
-from modbushil.datatype import DataType
-from modbushil.methodinvoker import MethodInvoker
-from modbushil.iotype import IOType
-from modbushil.modbusiobundlesconfiguration import ModbusIOBundlesConfiguration
-from modbushil.variablemapping import VariableMapping
+from .datatype import DataType
+from .methodinvoker import MethodInvoker
+from .iotype import IOType
+from .modbusiobundlesconfiguration import ModbusIOBundlesConfiguration
+from .variablemapping import VariableMapping
 
 
 class ModbusIntegrationSettings:

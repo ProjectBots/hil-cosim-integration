@@ -1,6 +1,6 @@
 
-from modbushil.modbusregistertypes import ModbusRegisterTypes
-from modbushil.registerrange import RegisterRange
+from .modbusregistertypes import ModbusRegisterTypes
+from .registerrange import RegisterRange
 
 
 class ModbusIOBundlesConfiguration():

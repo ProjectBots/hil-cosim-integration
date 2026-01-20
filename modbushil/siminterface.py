@@ -1,12 +1,12 @@
-import mosaik_api_v3
-import time  # Added for RTT measurement
-from modbushil.mappingmanager import MappingManager
-from modbushil.configurationmanager import ConfigurationManager
 from typing import Any
-
 import threading
 import asyncio
 import concurrent.futures as cf
+
+import mosaik_api_v3
+
+from .mappingmanager import MappingManager
+from .configurationmanager import ConfigurationManager
 
 
 class ModbusSimInterface(mosaik_api_v3.Simulator):
@@ -55,20 +55,6 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
         return self.meta
 
     def finalize(self):
-        # New: Calculate and print RTT statistics before closing
-        if self.step_durations:
-            min_rtt = min(self.step_durations)
-            max_rtt = max(self.step_durations)
-            avg_rtt = sum(self.step_durations) / len(self.step_durations)
-
-            print("\n" + "=" * 40)
-            print("MODBUS ROUND TRIP TIME (RTT) STATISTICS")
-            print(f"Total Steps Measured: {len(self.step_durations)}")
-            print(f"Minimum RTT:          {min_rtt:.6f} seconds")
-            print(f"Maximum RTT:          {max_rtt:.6f} seconds")
-            print(f"Average RTT:          {avg_rtt:.6f} seconds")
-            print("=" * 40 + "\n")
-
         if self.step_size <= 0:
             return super().finalize()
 
@@ -101,9 +87,6 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
         return result
 
     def step(self, time_val, inputs, max_advance):
-        # New: Start timer for this step
-        step_start = time.perf_counter()
-
         for eid, attrs in inputs.items():
             if self.use_async:
                 # In async mode, we wait for the previous step's Modbus result to resolve
@@ -122,10 +105,6 @@ class ModbusSimInterface(mosaik_api_v3.Simulator):
                     self.modbus_manager[eid], vars
                 )
                 self.entity_public[eid].update(result)
-
-        # New: Record the total time spent in this step
-        step_end = time.perf_counter()
-        self.step_durations.append(step_end - step_start)
 
         return time_val + self.step_size
 
