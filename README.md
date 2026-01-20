@@ -15,7 +15,7 @@ This adapter enables Modbus communication within Mosaik scenarios, allowing hard
 
 To integrate this simulator in a Mosaik scenario, you first need to define all models you want to use in the ConfigurationManager.
 
-**This step is has to be done before creating initializing the Mosaik world** as the ConfigurationManager needs to be aware of all available models at that point.
+**This step has to be done before creating initializing the Mosaik world** as the ConfigurationManager needs to be aware of all available models at that point.
 
 ```python
 from modbushil.configurationmanager import ConfigurationManager
